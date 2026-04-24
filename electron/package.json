@@ -25,8 +25,7 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*",
-      "backend-bin/**/*"
+      "dist-electron/**/*"
     ],
     "mac": {
       "category": "public.app-category.education",
@@ -44,7 +43,7 @@
       "target": ["AppImage", "deb"]
     },
     "extraResources": [
-      { "from": "backend-bin/", "to": "backend-bin/", "filter": ["**/*"] }
+      { "from": "../backend/dist/ai-class-backend", "to": "bin/ai-class-backend" }
     ]
   },
   "devDependencies": {
