@@ -1,86 +1,137 @@
-import os
-import json
-import asyncio
-from typing import AsyncGenerator, List, Dict, Any, Optional
-from openai import AsyncOpenAI, OpenAIError
-from dotenv import load_dotenv
+"""
+LLM 模块 - 大语言模型服务
+支持动态 API Key（由前端传入），懒加载客户端
+默认使用 MiniMax 接口
+"""
+import logging
+from typing import AsyncGenerator, List, Dict, Optional
+from openai import AsyncOpenAI
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
+DEFAULT_SYSTEM_PROMPT = """你是一个智能课堂助手，正在帮助学生实时理解课堂内容。
+你的任务：
+1. 当老师提出问题时，根据课件内容和课程背景，给出简洁、准确的参考答案
+2. 答案要适合学生在课堂上快速理解和回答
+3. 如果有课件内容，优先基于课件内容作答
+4. 回答要简洁，通常不超过200字，除非问题需要详细解释
+注意：你的回答是给学生作为参考的，请用第一人称"我认为..."或直接给出答案。"""
+
+QUESTION_DETECT_PROMPT = """判断以下文本是否包含老师向学生提出的问题或需要学生回答的内容。
+文本：{text}
+只需回答 "YES" 或 "NO"。
+- YES：文本中包含疑问句、提问、或明显的互动邀请（如"大家觉得呢"、"谁来回答"、"这道题怎么解"等）
+- NO：文本是普通陈述，没有提问"""
+
+# 默认使用 MiniMax
+DEFAULT_API_BASE_URL = "https://api.minimax.chat/v1"
+DEFAULT_MODEL = "MiniMax-Text-01"
+
 
 class LLMService:
-    def __init__(self, api_key: Optional[str] = None, api_base_url: Optional[str] = None):
-        # 优先使用传入的 API Key 和 Base URL，否则回退到环境变量
-        self.api_key = api_key or os.getenv("LLM_API_KEY")
-        self.api_base_url = api_base_url or os.getenv("LLM_API_BASE_URL", "https://api.openai.com/v1")
+    """LLM 服务，支持动态 API Key（懒加载客户端）"""
 
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY is not set. Please provide it in the config or .env file.")
+    def __init__(self):
+        self._api_key: str = ""
+        self._base_url: str = DEFAULT_API_BASE_URL
+        self._model: str = DEFAULT_MODEL
+        self._client: Optional[AsyncOpenAI] = None
 
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base_url)
-        self.model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    def configure(self, api_key: str, base_url: str = "", model: str = ""):
+        """由 WebSocket 会话调用，动态更新 API 配置"""
+        key_changed = api_key and api_key != self._api_key
+        url_changed = base_url and base_url != self._base_url
+        if api_key:
+            self._api_key = api_key
+        if base_url:
+            self._base_url = base_url
+        if model:
+            self._model = model
+        if key_changed or url_changed:
+            self._client = None  # 配置变更时重置客户端
 
-    async def _get_llm_response(self, messages: List[Dict[str, str]], stream: bool = False) -> AsyncGenerator[str, None]:
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=stream,
-                temperature=0.7,
+    def _get_client(self) -> AsyncOpenAI:
+        """获取客户端（懒加载，避免启动时因无 Key 而报错）"""
+        if self._client is None:
+            if not self._api_key:
+                raise ValueError("API Key 未配置，请在「课程配置」中填写 API Key 后点击保存")
+            self._client = AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
             )
-
-            if stream:
-                async for chunk in response:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
-            else:
-                if response.choices and response.choices[0].message.content:
-                    yield response.choices[0].message.content
-                else:
-                    yield ""
-        except OpenAIError as e:
-            print(f"OpenAI API Error: {e}")
-            yield f"对不起，LLM 服务出现错误：{e}"
-        except Exception as e:
-            print(f"LLM Service Error: {e}")
-            yield f"对不起，LLM 服务出现未知错误：{e}"
+        return self._client
 
     async def detect_question(self, text: str) -> bool:
-        prompt = f"""你是一个问题检测器。请判断以下文本是否包含一个明确的问题，需要 AI 回答。只回答 '是' 或 '否'。
-
-文本: {text}
-"""
-        messages = [
-            {"role": "system", "content": "你是一个问题检测器。"},
-            {"role": "user", "content": prompt}
-        ]
-        response_gen = self._get_llm_response(messages)
-        response = "".join([chunk async for chunk in response_gen]).strip().lower()
-        return "是" in response or "yes" in response
+        if not text or len(text.strip()) < 5:
+            return False
+        try:
+            client = self._get_client()
+            response = await client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "user", "content": QUESTION_DETECT_PROMPT.format(text=text)}],
+                max_tokens=5,
+                temperature=0,
+            )
+            result = response.choices[0].message.content.strip().upper()
+            is_question = result.startswith("YES")
+            logger.info(f"问题检测: '{text[:50]}' -> {is_question}")
+            return is_question
+        except ValueError as e:
+            logger.warning(f"问题检测跳过（未配置 Key）: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"问题检测失败: {e}")
+            return False
 
     async def generate_answer_stream(
         self,
         question_text: str,
         context_texts: List[str],
-        system_prompt: str,
-        course_materials: str,
-        history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: str = "",
+        course_materials: str = "",
+        history: Optional[List[Dict]] = None,
     ) -> AsyncGenerator[str, None]:
-        full_context = "\n".join(context_texts)
-        
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        else:
-            messages.append({"role": "system", "content": "你是一个AI助教，请根据提供的课程内容和对话历史，简洁明了地回答学生的问题。"})
+        final_system_prompt = system_prompt.strip() if system_prompt.strip() else DEFAULT_SYSTEM_PROMPT
+        if course_materials.strip():
+            final_system_prompt += f"\n\n## 课件内容\n\n{course_materials}"
 
-        if course_materials:
-            messages.append({"role": "system", "content": f"以下是课程材料，请优先参考这些材料来回答问题：\n{course_materials}"})
+        context_str = ""
+        if context_texts:
+            recent = context_texts[-5:]
+            context_str = "\n".join(f"- {t}" for t in recent)
 
+        user_message = f"""## 课堂上下文（最近内容）
+{context_str if context_str else "（无）"}
+
+## 老师的问题
+{question_text}
+
+请给出简洁的参考答案："""
+
+        messages = [{"role": "system", "content": final_system_prompt}]
         if history:
-            messages.extend(history)
+            messages.extend(history[-6:])
+        messages.append({"role": "user", "content": user_message})
 
-        messages.append({"role": "user", "content": f"根据以上信息和对话历史，请回答以下问题：\n{question_text}\n\n相关讨论内容：\n{full_context}"})
+        try:
+            client = self._get_client()
+            stream = await client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                stream=True,
+                temperature=0.7,
+                max_tokens=500,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield delta.content
+        except ValueError as e:
+            yield f"[错误：{str(e)}]"
+        except Exception as e:
+            logger.error(f"LLM 生成失败: {e}")
+            yield f"[生成失败: {str(e)}]"
 
-        async for chunk in self._get_llm_response(messages, stream=True):
-            yield chunk
 
+# 全局单例（懒加载，启动时不初始化客户端）
+llm_service = LLMService()
