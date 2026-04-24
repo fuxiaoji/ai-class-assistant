@@ -94,7 +94,22 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 session.is_listening = False
                 await send_json(websocket, {"type": "listening_stopped"})
 
-            # ── 音频数据块 ────────────────────────────────────
+            # ── 前端 Web Speech API 识别文字（推荐，无需 OpenAI Key）──
+            elif msg_type == "transcript":
+                if not session.is_listening:
+                    continue
+                text = msg.get("text", "").strip()
+                is_final = msg.get("is_final", True)
+                if not text or not is_final:
+                    continue
+                session.add_transcript(text)
+                logger.info(f"[ASR-Web] {text}")
+                if not session.is_generating:
+                    asyncio.create_task(
+                        _detect_and_answer(websocket, session, text)
+                    )
+
+            # ── 音频数据块（Whisper 模式，需要 OpenAI Key）──────
             elif msg_type == "audio_chunk":
                 if not session.is_listening:
                     continue
@@ -139,6 +154,20 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"WebSocket 异常 {session_id}: {e}")
         await send_json(websocket, {"type": "error", "message": str(e)})
+
+
+async def _detect_and_answer(websocket: WebSocket, session, text: str):
+    """问题检测 -> 生成答案（Web Speech API 模式）"""
+    try:
+        is_question = await llm_service.detect_question(text)
+        if is_question:
+            await send_json(websocket, {
+                "type": "question_detected",
+                "text": text
+            })
+            await _generate_answer(websocket, session, text)
+    except Exception as e:
+        logger.error(f"问题检测异常: {e}")
 
 
 async def _process_audio(websocket: WebSocket, session, audio_bytes: bytes):
