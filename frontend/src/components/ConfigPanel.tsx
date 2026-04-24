@@ -1,55 +1,48 @@
 /**
- * 配置面板
- * 提供课程名称、系统提示词预设、课件上传和文本粘贴功能
+ * 配置面板组件
+ * 支持课程配置、课件上传、LLM API 配置
  */
-import React, { useState, useRef } from 'react';
-import type { SessionConfig, UploadResponse } from '../types';
+import React, { useRef, useState } from 'react';
 import { api } from '../services/api';
+import type { SessionConfig, UploadResponse } from '../types';
 
 interface ConfigPanelProps {
   sessionId: string;
   config: SessionConfig;
-  onConfigChange: (config: Partial<SessionConfig>) => void;
+  apiKey: string;
+  apiBaseUrl: string;
+  onConfigChange: (partial: Partial<SessionConfig>) => void;
+  onApiKeyChange: (key: string) => void;
+  onApiBaseUrlChange: (url: string) => void;
   onSave: () => void;
 }
 
 const PRESET_PROMPTS = [
-  {
-    label: '通用课堂助手',
-    value: '你是一个智能课堂助手，帮助学生理解课堂内容。当老师提问时，根据课件内容给出简洁准确的参考答案，用第一人称回答，不超过200字。',
-  },
-  {
-    label: '数学课助手',
-    value: '你是一个数学课堂助手，擅长解题和推导。当老师提出数学问题时，给出清晰的解题思路和步骤，必要时用公式表示。',
-  },
-  {
-    label: '英语课助手',
-    value: '你是一个英语课堂助手。当老师用英文提问时，用英文回答；当老师用中文提问时，用中文回答。注重语法和表达的准确性。',
-  },
-  {
-    label: '编程课助手',
-    value: '你是一个编程课堂助手，熟悉各种编程语言和算法。当老师提出编程相关问题时，给出简洁的代码示例或解释，重点突出核心概念。',
-  },
+  { label: '学术助教', value: '你是一个知识渊博的大学助教。请根据课件内容用简洁清晰的语言回答问题，必要时举例说明。' },
+  { label: '考试辅导', value: '你是一个考试辅导老师。请根据课件内容回答问题，并提供解题思路和关键要点。' },
+  { label: '启蒙讲师', value: '你是一个耐心的启蒙讲师。请用通俗易懂的语言解释概念，避免过于复杂的表述。' },
 ];
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   sessionId,
   config,
+  apiKey,
+  apiBaseUrl,
   onConfigChange,
+  onApiKeyChange,
+  onApiBaseUrlChange,
   onSave,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMsg, setUploadMsg] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await api.updateConfig(sessionId, config);
+      await new Promise(r => setTimeout(r, 500));
       onSave();
-    } catch (e) {
-      console.error(e);
     } finally {
       setIsSaving(false);
     }
@@ -58,21 +51,17 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !sessionId) return;
-
     setUploadStatus('uploading');
     setUploadMsg('正在上传并解析...');
-
     try {
       const result: UploadResponse = await api.uploadMaterial(sessionId, file);
       setUploadStatus('success');
       setUploadMsg(`✓ 已解析 ${result.extracted_text_length} 字符`);
-      // 更新本地显示
       onConfigChange({ courseMaterials: `[已上传: ${file.name}]\n${result.preview}...` });
     } catch (err) {
       setUploadStatus('error');
       setUploadMsg(`✗ ${err instanceof Error ? err.message : '上传失败'}`);
     }
-
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -86,6 +75,39 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
   return (
     <div className="flex flex-col gap-5 overflow-y-auto">
+      {/* LLM API 配置 */}
+      <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-blue-300 mb-3">🔑 LLM API 配置</h3>
+        
+        {/* API Key */}
+        <div className="mb-3">
+          <label className="block text-xs font-medium text-slate-300 mb-1">API Key</label>
+          <input
+            type="password"
+            className="input-field text-sm"
+            placeholder="sk-... (OpenAI、DeepSeek 等兼容接口)"
+            value={apiKey}
+            onChange={e => onApiKeyChange(e.target.value)}
+          />
+          <p className="text-xs text-slate-500 mt-1">💾 自动保存到浏览器本地存储</p>
+        </div>
+
+        {/* API Base URL */}
+        <div>
+          <label className="block text-xs font-medium text-slate-300 mb-1">API Base URL</label>
+          <input
+            type="text"
+            className="input-field text-sm"
+            placeholder="https://api.openai.com/v1"
+            value={apiBaseUrl}
+            onChange={e => onApiBaseUrlChange(e.target.value)}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            默认：OpenAI | 可切换：DeepSeek、Anthropic 等兼容接口
+          </p>
+        </div>
+      </div>
+
       {/* 课程名称 */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1.5">课程名称</label>
@@ -147,7 +169,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
             )}
           </div>
         </div>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -155,7 +176,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
           className="hidden"
           onChange={handleFileUpload}
         />
-
         {uploadStatus !== 'idle' && (
           <p className={`text-xs mb-1.5 ${
             uploadStatus === 'success' ? 'text-emerald-400' :
@@ -164,7 +184,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
             {uploadMsg}
           </p>
         )}
-
         <textarea
           className="textarea-field text-xs"
           rows={6}
@@ -181,7 +200,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
       <button
         className="btn-primary justify-center"
         onClick={handleSave}
-        disabled={!sessionId || isSaving}
+        disabled={!sessionId || isSaving || !apiKey}
+        title={!apiKey ? '请先填写 API Key' : ''}
       >
         {isSaving ? (
           <>

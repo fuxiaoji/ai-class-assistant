@@ -24,6 +24,8 @@ interface AppState {
   currentQuestion: string;
   config: SessionConfig;
   activeTab: 'listen' | 'config' | 'history';
+  apiKey: string;
+  apiBaseUrl: string;
 }
 
 const initialState: AppState = {
@@ -41,6 +43,8 @@ const initialState: AppState = {
     courseMaterials: '',
   },
   activeTab: 'listen',
+  apiKey: localStorage.getItem('llm_api_key') || '',
+  apiBaseUrl: localStorage.getItem('llm_api_base_url') || 'https://api.openai.com/v1',
 };
 
 // ===== Action 定义 =====
@@ -58,7 +62,9 @@ type Action =
   | { type: 'FINISH_STREAMING'; payload: { answerId: string; fullAnswer: string } }
   | { type: 'UPDATE_CONFIG'; payload: Partial<SessionConfig> }
   | { type: 'SET_ACTIVE_TAB'; payload: AppState['activeTab'] }
-  | { type: 'CLEAR_HISTORY' };
+  | { type: 'CLEAR_HISTORY' }
+  | { type: 'SET_API_KEY'; payload: string }
+  | { type: 'SET_API_BASE_URL'; payload: string };
 
 // ===== Reducer =====
 
@@ -117,6 +123,12 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, activeTab: action.payload };
     case 'CLEAR_HISTORY':
       return { ...state, transcripts: [], answers: [], currentStreamingAnswer: '' };
+    case 'SET_API_KEY':
+      localStorage.setItem('llm_api_key', action.payload);
+      return { ...state, apiKey: action.payload };
+    case 'SET_API_BASE_URL':
+      localStorage.setItem('llm_api_base_url', action.payload);
+      return { ...state, apiBaseUrl: action.payload };
     default:
       return state;
   }

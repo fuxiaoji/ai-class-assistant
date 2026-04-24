@@ -72,8 +72,14 @@ function AppContent() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAudioChunk = useCallback((base64Data: string) => {
-    send({ type: 'audio_chunk', data: base64Data, session_id: state.sessionId });
-  }, [send, state.sessionId]);
+    send({ 
+      type: 'audio_chunk', 
+      data: base64Data, 
+      session_id: state.sessionId,
+      api_key: state.apiKey,
+      api_base_url: state.apiBaseUrl,
+    });
+  }, [send, state.sessionId, state.apiKey, state.apiBaseUrl]);
 
   const { start: startAudio, stop: stopAudio, isCapturing, volume, error: audioError } = useAudioCapture({
     chunkDurationMs: 3000,
@@ -98,9 +104,16 @@ function AppContent() {
   }, [send]);
 
   const handleConfigSave = useCallback(() => {
-    send({ type: 'config_update', system_prompt: state.config.systemPrompt, course_name: state.config.courseName, course_materials: state.config.courseMaterials });
+    send({ 
+      type: 'config_update', 
+      system_prompt: state.config.systemPrompt, 
+      course_name: state.config.courseName, 
+      course_materials: state.config.courseMaterials,
+      api_key: state.apiKey,
+      api_base_url: state.apiBaseUrl,
+    });
     dispatch({ type: 'SET_ACTIVE_TAB', payload: 'listen' });
-  }, [send, state.config, dispatch]);
+  }, [send, state.config, state.apiKey, state.apiBaseUrl, dispatch]);
 
   const isStreaming = state.listeningStatus === 'processing';
 
@@ -143,7 +156,16 @@ function AppContent() {
               <AnswerPanel currentQuestion={state.currentQuestion} currentStreamingAnswer={state.currentStreamingAnswer} answers={state.answers} isStreaming={isStreaming} />
             )}
             {state.activeTab === 'config' && (
-              <ConfigPanel sessionId={state.sessionId} config={state.config} onConfigChange={(partial) => dispatch({ type: 'UPDATE_CONFIG', payload: partial })} onSave={handleConfigSave} />
+              <ConfigPanel 
+                sessionId={state.sessionId} 
+                config={state.config} 
+                apiKey={state.apiKey}
+                apiBaseUrl={state.apiBaseUrl}
+                onConfigChange={(partial) => dispatch({ type: 'UPDATE_CONFIG', payload: partial })} 
+                onApiKeyChange={(key) => dispatch({ type: 'SET_API_KEY', payload: key })}
+                onApiBaseUrlChange={(url) => dispatch({ type: 'SET_API_BASE_URL', payload: url })}
+                onSave={handleConfigSave} 
+              />
             )}
           </div>
         </div>
