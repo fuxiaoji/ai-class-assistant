@@ -115,6 +115,35 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
           <label style={{ display: 'block', color: '#cbd5e1', fontSize: '12px', marginBottom: '4px' }}>
             API Base URL
           </label>
+          {/* 快速选择服务商 */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+            {([
+              { label: 'MiniMax', url: 'https://api.minimax.chat/v1' },
+              { label: 'DeepSeek', url: 'https://api.deepseek.com/v1' },
+              { label: 'OpenAI', url: 'https://api.openai.com/v1' },
+              { label: 'Moonshot', url: 'https://api.moonshot.cn/v1' },
+              { label: '智谱 GLM', url: 'https://open.bigmodel.cn/api/paas/v4' },
+              { label: 'Qwen', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+            ] as { label: string; url: string }[]).map(p => (
+              <button
+                key={p.label}
+                onClick={() => onApiBaseUrlChange(p.url)}
+                style={{
+                  padding: '3px 10px',
+                  fontSize: '11px',
+                  borderRadius: '12px',
+                  border: apiBaseUrl === p.url ? '1px solid #38bdf8' : '1px solid #334155',
+                  background: apiBaseUrl === p.url ? 'rgba(56,189,248,0.15)' : '#1e293b',
+                  color: apiBaseUrl === p.url ? '#38bdf8' : '#94a3b8',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap' as const,
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           <input
             type="text"
             style={inputStyle}
@@ -123,7 +152,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
             onChange={e => onApiBaseUrlChange(e.target.value)}
           />
           <p style={{ color: '#64748b', fontSize: '11px', marginTop: '4px', marginBottom: 0 }}>
-            DeepSeek: https://api.deepseek.com/v1 &nbsp;|&nbsp; 默认: OpenAI
+            点击上方按钮快速选择，或手动输入自定义地址
           </p>
         </div>
       </div>
