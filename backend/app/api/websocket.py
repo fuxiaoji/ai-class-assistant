@@ -72,12 +72,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
             # ── 配置更新 ──────────────────────────────────────
             elif msg_type == "config_update":
-cd . && ls /Users/Zhuanz1/Desktop/code/tieba_spider/
                 api_key = msg.get("api_key", "").strip()
                 api_base_url = msg.get("api_base_url", "").strip()
                 if api_key:
                     llm_service.configure(api_key=api_key, base_url=api_base_url)
-                    logger.info(fLLM API 'PYEOF': base_url={api_base_url or llm_service._base_url}")
+                    logger.info(f"LLM API 已配置: base_url={api_base_url or llm_service._base_url}")
                 if "system_prompt" in msg:
                     session.system_prompt = msg["system_prompt"]
                 if "course_name" in msg:
