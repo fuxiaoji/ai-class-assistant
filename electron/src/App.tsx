@@ -49,6 +49,7 @@ export default function App() {
         }, 300);
         break;
       case 'transcript': {
+        // 后端 faster-whisper 识别完成后推送过来的文字
         const id = `t-${Date.now()}-${Math.random()}`;
         dispatch({ type: 'ADD_TRANSCRIPT', payload: { id, text: msg.text as string, isQuestion: false, timestamp: Date.now() } });
         break;
@@ -119,18 +120,20 @@ export default function App() {
     initSession();
   }, [backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleTranscript = useCallback((text: string, isFinal: boolean) => {
-    // 将浏览器识别的文字发给后端，替代原来的 Whisper base64 音频
-    send({ type: 'transcript', text, is_final: isFinal, session_id: state.sessionId });
-    // 同时更新本地字幕
-    if (isFinal) {
-      const id = `t-${Date.now()}-${Math.random()}`;
-      dispatch({ type: 'ADD_TRANSCRIPT', payload: { id, text, isQuestion: false, timestamp: Date.now() } });
-    }
-  }, [send, state.sessionId, dispatch]);
+  /**
+   * 收到音频块时，通过 WebSocket 发送给后端
+   * 后端用 faster-whisper 识别，识别完成后推送 transcript 消息
+   */
+  const handleAudioChunk = useCallback((base64Data: string) => {
+    send({
+      type: 'audio_chunk',
+      data: base64Data,
+      session_id: state.sessionId,
+    });
+  }, [send, state.sessionId]);
 
   const { start: startAudio, stop: stopAudio, isCapturing, volume, error: audioError } = useAudioCapture({
-    onTranscript: handleTranscript,
+    onAudioChunk: handleAudioChunk,
     onVolumeChange: (v) => dispatch({ type: 'SET_VOLUME', payload: v }),
   });
 

@@ -37,7 +37,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     服务端消息类型：
     - connected: 连接成功
-    - transcript: ASR 识别结果
+    - transcript: ASR 识别结果（faster-whisper 本地识别后推送）
     - question_detected: 检测到问题
     - answer_chunk: 答案流式片段
     - answer_done: 答案生成完成
@@ -109,7 +109,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         _detect_and_answer(websocket, session, text)
                     )
 
-            # ── 音频数据块（Whisper 模式，需要 OpenAI Key）──────
+            # ── 音频数据块（faster-whisper 本地离线识别，无需 API Key）──────
             elif msg_type == "audio_chunk":
                 if not session.is_listening:
                     continue

@@ -1,51 +1,51 @@
 /**
- * 音频采集 Hook（Web Speech API 版本）
- * 使用浏览器原生 Web Speech API 做实时语音识别，无需 OpenAI Whisper Key
- * Electron 和 Chrome 均内置支持，完全免费
+ * 音频采集 Hook — 麦克风录音 + 发送音频块给后端
+ *
+ * 架构：前端录音 → base64 编码 → 通过 WebSocket 发送 audio_chunk → 后端 faster-whisper 识别
+ * 优点：完全离线识别，无需 Google 服务，国内网络正常使用
+ *
+ * 录音参数：
+ *   - MediaRecorder + WebM/Opus 格式（浏览器原生支持）
+ *   - 每 2 秒发送一个音频块（可调整 CHUNK_INTERVAL_MS）
+ *   - 同时用 AnalyserNode 实时监控音量
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
+/** 每个音频块的时长（毫秒）*/
+const CHUNK_INTERVAL_MS = 2000;
 
 interface UseAudioCaptureOptions {
-  /** 收到识别文字的回调 */
-  onTranscript: (text: string, isFinal: boolean) => void;
+  /** 收到后端识别文字的回调（由 App.tsx 通过 WebSocket 消息触发，此 hook 不直接调用） */
+  onTranscript?: (text: string, isFinal: boolean) => void;
   /** 音量变化回调（0-1） */
   onVolumeChange?: (volume: number) => void;
-  /** 识别语言，默认中文 */
-  lang?: string;
+  /** 收到音频块时的回调（base64 编码的 WebM 数据） */
+  onAudioChunk: (base64Data: string) => void;
 }
 
 export function useAudioCapture({
-  onTranscript,
   onVolumeChange,
-  lang = 'zh-CN',
+  onAudioChunk,
 }: UseAudioCaptureOptions) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState(0);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const isCapturingRef = useRef(false);
 
-  const onTranscriptRef = useRef(onTranscript);
   const onVolumeChangeRef = useRef(onVolumeChange);
-  useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
+  const onAudioChunkRef = useRef(onAudioChunk);
   useEffect(() => { onVolumeChangeRef.current = onVolumeChange; }, [onVolumeChange]);
+  useEffect(() => { onAudioChunkRef.current = onAudioChunk; }, [onAudioChunk]);
 
-  const startVolumeMonitor = useCallback(async () => {
+  /** 启动音量监控（AnalyserNode） */
+  const startVolumeMonitor = useCallback((stream: MediaStream) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
@@ -70,74 +70,74 @@ export function useAudioCapture({
       };
       animFrameRef.current = requestAnimationFrame(loop);
     } catch (e) {
-      console.warn('音量监控启动失败:', e);
+      console.warn('[AudioCapture] 音量监控启动失败:', e);
     }
   }, []);
 
   const start = useCallback(async () => {
     setError(null);
 
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      setError('当前环境不支持 Web Speech API，请使用 Chrome 或 Electron');
-      return;
-    }
-
-    await startVolumeMonitor();
-
-    const recognition = new SpeechRecognitionAPI();
-    recognition.lang = lang;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const text = result[0].transcript.trim();
-        if (!text) continue;
-        onTranscriptRef.current(text, result.isFinal);
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('[ASR] 识别错误:', event.error);
-      if (event.error === 'not-allowed') {
-        setError('麦克风权限被拒绝，请在系统设置中允许访问麦克风');
-        setIsCapturing(false);
-        isCapturingRef.current = false;
-      } else if (event.error === 'network') {
-        setError('网络错误：Web Speech API 需要连接网络（使用 Google 语音服务）');
-      }
-      // no-speech 等错误忽略，自动重启
-    };
-
-    recognition.onend = () => {
-      if (isCapturingRef.current) {
-        try { recognition.start(); } catch (e) { /* 忽略 */ }
-      }
-    };
-
-    recognitionRef.current = recognition;
-    isCapturingRef.current = true;
-
     try {
-      recognition.start();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      isCapturingRef.current = true;
+
+      // 启动音量监控
+      startVolumeMonitor(stream);
+
+      // 选择最佳音频格式
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : '';
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+
+      recorder.ondataavailable = async (event) => {
+        if (!event.data || event.data.size < 500) return; // 跳过过小的块（静音）
+        try {
+          const arrayBuffer = await event.data.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuffer);
+          // 转 base64
+          let binary = '';
+          for (let i = 0; i < uint8.length; i++) {
+            binary += String.fromCharCode(uint8[i]);
+          }
+          const base64 = btoa(binary);
+          onAudioChunkRef.current(base64);
+        } catch (e) {
+          console.error('[AudioCapture] 音频块处理失败:', e);
+        }
+      };
+
+      recorder.onerror = (e) => {
+        console.error('[AudioCapture] 录音错误:', e);
+        setError('录音出错，请重试');
+      };
+
+      // 每 CHUNK_INTERVAL_MS 毫秒触发一次 ondataavailable
+      recorder.start(CHUNK_INTERVAL_MS);
       setIsCapturing(true);
     } catch (e) {
-      setError('语音识别启动失败: ' + (e instanceof Error ? e.message : String(e)));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('Permission') || msg.includes('NotAllowed')) {
+        setError('麦克风权限被拒绝，请在系统设置中允许访问麦克风');
+      } else {
+        setError('麦克风启动失败: ' + msg);
+      }
       isCapturingRef.current = false;
     }
-  }, [lang, startVolumeMonitor]);
+  }, [startVolumeMonitor]);
 
   const stop = useCallback(() => {
     isCapturingRef.current = false;
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
     }
+    recorderRef.current = null;
     streamRef.current?.getTracks().forEach(t => t.stop());
     audioCtxRef.current?.close();
     streamRef.current = null;
@@ -151,9 +151,8 @@ export function useAudioCapture({
     return () => {
       isCapturingRef.current = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        recorderRef.current.stop();
       }
       streamRef.current?.getTracks().forEach(t => t.stop());
       audioCtxRef.current?.close();
