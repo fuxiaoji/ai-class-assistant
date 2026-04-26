@@ -50,7 +50,12 @@ npm run dist:linux  # Linux (.AppImage)
 
 ## 本地端 1.0 安装包
 
-当前已生成的安装包在 `electron/release/` 目录：
+下载入口（GitHub）：
+
+- 最新发布页：[`Releases / latest`](https://github.com/fuxiaoji/ai-class-assistant/releases/latest)
+- 固定版本页：[`v1.0.0`](https://github.com/fuxiaoji/ai-class-assistant/releases/tag/v1.0.0)
+
+当前构建出的安装包文件（位于 `electron/release/`）：
 
 - `AI听课助手-1.0.0-arm64.dmg`
 - `AI听课助手-1.0.0-arm64-mac.zip`
