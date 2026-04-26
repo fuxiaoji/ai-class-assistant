@@ -48,6 +48,22 @@ npm run dist:win    # Windows (.exe)
 npm run dist:linux  # Linux (.AppImage)
 ```
 
+## 本地端 1.0 安装包
+
+当前已生成的安装包在 `electron/release/` 目录：
+
+- `AI听课助手-1.0.0-arm64.dmg`
+- `AI听课助手-1.0.0-arm64-mac.zip`
+- `AI听课助手-1.0.0.dmg`
+- `AI听课助手-1.0.0-mac.zip`
+
+macOS 安装与启动：
+
+```bash
+open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.0.0-arm64.dmg
+open -a "/Applications/AI听课助手.app"
+```
+
 ## 项目结构
 
 ```

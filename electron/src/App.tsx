@@ -44,14 +44,26 @@ export default function App() {
               course_materials: s.config.courseMaterials,
               api_key: s.apiKey,
               api_base_url: s.apiBaseUrl,
+              asr_language: s.config.asrLanguage,
+              translate_enabled: s.config.translateEnabled,
+              translate_target_lang: s.config.translateTargetLang,
             });
           }
         }, 300);
         break;
       case 'transcript': {
-        // 后端 faster-whisper 识别完成后推送过来的文字
+        // 后端 faster-whisper 识别完成后推送过来的文字（可能附带翻译）
         const id = `t-${Date.now()}-${Math.random()}`;
-        dispatch({ type: 'ADD_TRANSCRIPT', payload: { id, text: msg.text as string, isQuestion: false, timestamp: Date.now() } });
+        dispatch({
+          type: 'ADD_TRANSCRIPT',
+          payload: {
+            id,
+            text: msg.text as string,
+            translation: msg.translation as string | undefined,
+            isQuestion: false,
+            timestamp: Date.now()
+          }
+        });
         break;
       }
       case 'question_detected': {
@@ -73,6 +85,7 @@ export default function App() {
         break;
       case 'error':
         console.error('服务端错误:', msg.message);
+        dispatch({ type: 'SET_LISTENING_STATUS', payload: isListeningRef.current ? 'listening' : 'idle' });
         break;
     }
   }, [dispatch, state.transcripts]);
@@ -173,6 +186,9 @@ export default function App() {
       course_materials: state.config.courseMaterials,
       api_key: state.apiKey,
       api_base_url: state.apiBaseUrl,
+      asr_language: state.config.asrLanguage,
+      translate_enabled: state.config.translateEnabled,
+      translate_target_lang: state.config.translateTargetLang,
     });
     dispatch({ type: 'SET_ACTIVE_TAB', payload: 'listen' });
   }, [send, state.config, state.apiKey, state.apiBaseUrl, dispatch]);
