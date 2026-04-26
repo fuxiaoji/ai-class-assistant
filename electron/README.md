@@ -62,6 +62,15 @@ npm run dist:linux  # Linux (.AppImage)
 - `AI听课助手-1.0.0.dmg`
 - `AI听课助手-1.0.0-mac.zip`
 
+直链下载（GitHub Release Assets）：
+
+- [下载 `AI听课助手-1.0.0-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-arm64.dmg)
+- [下载 `AI听课助手-1.0.0-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-arm64-mac.zip)
+- [下载 `AI听课助手-1.0.0.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0.dmg)
+- [下载 `AI听课助手-1.0.0-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-mac.zip)
+
+> 如果点击直链是 `404`，说明该版本的 Release 里还没有上传对应资产文件，需要在 GitHub `Releases` 页面上传后才可下载。
+
 macOS 安装与启动：
 
 ```bash
