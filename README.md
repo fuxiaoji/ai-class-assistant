@@ -23,14 +23,15 @@
 
 项目采用模块化设计，方便功能剥离与二次开发：
 
-| 层级 | 技术栈 |
-|------|--------|
-| **后端 (Backend)** | Python 3.11 + FastAPI + WebSocket + uvicorn |
-| **ASR 语音识别** | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — 本地离线，CPU int8 量化，内置 VAD |
-| **LLM 大模型** | OpenAI 兼容接口（默认 MiniMax，支持 DeepSeek / OpenAI / Moonshot / 智谱 / Qwen） |
-| **前端 (Frontend)** | React 18 + Vite + TypeScript + TailwindCSS |
-| **桌面端 (Desktop)** | Electron + IPC 桥接 + 全局快捷键 |
-| **打包 (Build)** | electron-builder（macOS .dmg）+ PyInstaller（后端二进制） |
+
+| 层级                 | 技术栈                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| **后端 (Backend)**   | Python 3.11 + FastAPI + WebSocket + uvicorn                                                      |
+| **ASR 语音识别**     | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — 本地离线，CPU int8 量化，内置 VAD |
+| **LLM 大模型**       | OpenAI 兼容接口（默认 MiniMax，支持 DeepSeek / OpenAI / Moonshot / 智谱 / Qwen）                 |
+| **前端 (Frontend)**  | React 18 + Vite + TypeScript + TailwindCSS                                                       |
+| **桌面端 (Desktop)** | Electron + IPC 桥接 + 全局快捷键                                                                 |
+| **打包 (Build)**     | electron-builder（macOS .dmg）+ PyInstaller（后端二进制）                                        |
 
 ---
 
@@ -52,6 +53,7 @@ pip install faster-whisper
 ```
 
 可通过环境变量 `WHISPER_MODEL_SIZE` 调整模型大小：
+
 - `tiny`（~75MB）：速度最快，精度较低
 - `base`（~145MB）：均衡选择
 - `small`（~500MB）：**默认**，精度与速度平衡
@@ -60,6 +62,37 @@ pip install faster-whisper
 ---
 
 ## 🚀 快速开始
+
+本地端 1.0 安装包
+
+下载入口（GitHub）：
+
+- 最新发布页：[`Releases / latest`](https://github.com/fuxiaoji/ai-class-assistant/releases/latest)
+- 固定版本页：[`v1.0.0`](https://github.com/fuxiaoji/ai-class-assistant/releases/tag/v1.0.0)
+
+当前构建出的安装包文件（位于 `electron/release/`）：
+
+- `AI听课助手-1.0.0-arm64.dmg`
+- `AI听课助手-1.0.0-arm64-mac.zip`
+- `AI听课助手-1.0.0.dmg`
+- `AI听课助手-1.0.0-mac.zip`
+
+直链下载（GitHub Release Assets）：
+
+- [下载 `AI听课助手-1.0.0-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-arm64.dmg)
+- [下载 `AI听课助手-1.0.0-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-arm64-mac.zip)
+- [下载 `AI听课助手-1.0.0.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0.dmg)
+- [下载 `AI听课助手-1.0.0-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-mac.zip)
+
+> 如果点击直链是 `404`，说明该版本的 Release 里还没有上传对应资产文件，需要在 GitHub `Releases` 页面上传后才可下载。
+
+macOS 安装与启动：
+
+```bash
+open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.0.0-arm64.dmg
+open -a "/Applications/AI听课助手.app"
+```
+
 
 ### 1. 环境准备
 
@@ -80,6 +113,7 @@ python main.py
 ### 3. 启动应用
 
 **网站端**：
+
 ```bash
 cd frontend
 npm install
@@ -87,6 +121,7 @@ npm run dev
 ```
 
 **桌面端（Electron）**：
+
 ```bash
 cd electron
 npm install
@@ -98,6 +133,7 @@ npm run dev
 打开应用后，点击右上角「⚙️ 课程配置」，在「AI 服务配置」区域填入你的 API Key。
 
 支持快速切换服务商：
+
 - **MiniMax**（默认）：[https://api.minimax.chat/v1](https://api.minimax.chat/v1)
 - **DeepSeek**：[https://api.deepseek.com/v1](https://api.deepseek.com/v1)
 - **OpenAI**：[https://api.openai.com/v1](https://api.openai.com/v1)
@@ -109,11 +145,12 @@ npm run dev
 
 ## ⌨️ 桌面端快捷键
 
-| 快捷键 | 功能 |
-|--------|------|
-| `Cmd/Ctrl + Shift + L` | **一键监听**：开启/关闭麦克风采集 |
+
+| 快捷键                 | 功能                                       |
+| ---------------------- | ------------------------------------------ |
+| `Cmd/Ctrl + Shift + L` | **一键监听**：开启/关闭麦克风采集          |
 | `Cmd/Ctrl + Shift + H` | **手动求助**：强制 AI 针对当前内容生成答案 |
-| `Cmd/Ctrl + Shift + W` | **隐身模式**：快速显示或隐藏助手窗口 |
+| `Cmd/Ctrl + Shift + W` | **隐身模式**：快速显示或隐藏助手窗口       |
 
 ---
 
