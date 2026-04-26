@@ -72,24 +72,24 @@ pip install faster-whisper
 
 当前构建出的安装包文件（位于 `electron/release/`）：
 
-- `AI听课助手-1.0.0-arm64.dmg`
-- `AI听课助手-1.0.0-arm64-mac.zip`
-- `AI听课助手-1.0.0.dmg`
-- `AI听课助手-1.0.0-mac.zip`
+- `AI.-1.0.0-arm64.dmg`
+- `AI.-1.0.0-arm64-mac.zip`
+- `AI.-1.0.0.dmg`
+- `AI.-1.0.0-mac.zip`
 
 直链下载（GitHub Release Assets）：
 
-- [下载 `AI听课助手-1.0.0-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-arm64.dmg)
-- [下载 `AI听课助手-1.0.0-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-arm64-mac.zip)
-- [下载 `AI听课助手-1.0.0.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0.dmg)
-- [下载 `AI听课助手-1.0.0-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI听课助手-1.0.0-mac.zip)
+- [下载 `AI.-1.0.0-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI.-1.0.0-arm64.dmg)
+- [下载 `AI.-1.0.0-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI.-1.0.0-arm64-mac.zip)
+- [下载 `AI.-1.0.0.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI.-1.0.0.dmg)
+- [下载 `AI.-1.0.0-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.0/AI.-1.0.0-mac.zip)
 
 
 
 macOS 安装与启动：
 
 ```bash
-open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.0.0-arm64.dmg
+open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI.-1.0.0-arm64.dmg
 open -a "/Applications/AI听课助手.app"
 ```
 
