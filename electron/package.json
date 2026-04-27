@@ -43,7 +43,7 @@
       "target": ["AppImage", "deb"]
     },
     "extraResources": [
-      { "from": "../backend/dist/ai-class-backend", "to": "bin/ai-class-backend" }
+      { "from": "backend-bin/", "to": "backend-bin/", "filter": ["**/*"] }
     ]
   },
   "devDependencies": {

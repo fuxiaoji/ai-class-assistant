@@ -13,6 +13,7 @@ import {
   nativeImage,
   dialog,
   Notification,
+  systemPreferences,
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -39,39 +40,67 @@ function getBackendPath(): string {
   return path.join(process.resourcesPath, 'backend-bin');
 }
 
+function getPackagedBackendExecPath(): string | null {
+  const candidates = [
+    path.join(process.resourcesPath, 'backend-bin', 'ai-class-backend'),
+    path.join(process.resourcesPath, 'bin', 'ai-class-backend'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function startBackend(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const backendDir = getBackendPath();
-    const mainPy = path.join(backendDir, 'main.py');
+    const commonEnv = {
+      ...process.env,
+      BACKEND_PORT: String(BACKEND_PORT),
+      APP_PORT: String(BACKEND_PORT),
+      CORS_ORIGINS: '*',
+    };
 
-    if (!fs.existsSync(mainPy)) {
-      console.warn('后端文件不存在，跳过后端启动:', mainPy);
-      resolve();
-      return;
-    }
-
-    // 查找 Python 可执行文件
-    const pythonCmds = isDev
-      ? ['python3', 'python3.11', 'python']
-      : [path.join(backendDir, 'python'), 'python3', 'python'];
-
-    const pythonCmd = pythonCmds[0]; // 开发模式用系统 python3
-
-    console.log(`启动后端: ${pythonCmd} -m uvicorn main:app --port ${BACKEND_PORT}`);
-
-    backendProcess = spawn(
-      pythonCmd,
-      ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)],
-      {
-        cwd: backendDir,
-        env: {
-          ...process.env,
-          BACKEND_PORT: String(BACKEND_PORT),
-          CORS_ORIGINS: '*',
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
+    if (isDev) {
+      const backendDir = getBackendPath();
+      const mainPy = path.join(backendDir, 'main.py');
+      if (!fs.existsSync(mainPy)) {
+        console.warn('后端文件不存在，跳过后端启动:', mainPy);
+        resolve();
+        return;
       }
-    );
+      const pythonCmd = 'python3';
+      console.log(`启动后端(Dev): ${pythonCmd} -m uvicorn main:app --port ${BACKEND_PORT}`);
+      backendProcess = spawn(
+        pythonCmd,
+        ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT)],
+        {
+          cwd: backendDir,
+          env: commonEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      );
+    } else {
+      const backendExec = getPackagedBackendExecPath();
+      if (!backendExec) {
+        console.warn('后端可执行文件不存在，跳过后端启动:', process.resourcesPath);
+        resolve();
+        return;
+      }
+      try {
+        fs.chmodSync(backendExec, 0o755);
+      } catch {
+      }
+      console.log(`启动后端(Pkg): ${backendExec}`);
+      backendProcess = spawn(
+        backendExec,
+        [],
+        {
+          cwd: path.dirname(backendExec),
+          env: commonEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      );
+    }
 
     let started = false;
 
@@ -332,6 +361,17 @@ function setupIPC() {
 
 app.whenReady().then(async () => {
   setupIPC();
+
+  if (process.platform === 'darwin') {
+    try {
+      const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+      if (micStatus !== 'granted') {
+        await systemPreferences.askForMediaAccess('microphone');
+      }
+    } catch (err) {
+      console.warn('麦克风权限预请求失败:', err);
+    }
+  }
 
   // 开发模式下不自动启动后端（请手动运行 run_backend.sh）
   if (!isDev) {
