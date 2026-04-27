@@ -42,6 +42,9 @@ async def get_session_config(session_id: str):
         system_prompt=session.system_prompt,
         course_name=session.course_name,
         course_materials_preview=session.course_materials[:200] if session.course_materials else "",
+        asr_language=session.asr_language,
+        translate_enabled=session.translate_enabled,
+        translate_target_lang=session.translate_target_lang,
         is_listening=session.is_listening,
     )
 
@@ -53,6 +56,9 @@ async def update_session_config(session_id: str, config: SessionConfig):
     session.system_prompt = config.system_prompt
     session.course_name = config.course_name
     session.course_materials = config.course_materials
+    session.asr_language = config.asr_language
+    session.translate_enabled = config.translate_enabled
+    session.translate_target_lang = config.translate_target_lang
     return {"message": "配置已更新", "session_id": session_id}
 
 

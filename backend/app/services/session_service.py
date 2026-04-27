@@ -25,6 +25,9 @@ class Session:
     system_prompt: str = ""
     course_name: str = ""
     course_materials: str = ""  # 提取后的课件文本
+    asr_language: str = "zh"
+    translate_enabled: bool = False
+    translate_target_lang: str = "en"
 
     # 实时上下文
     transcript_buffer: List[str] = field(default_factory=list)  # 最近识别的文本

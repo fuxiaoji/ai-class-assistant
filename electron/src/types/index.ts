@@ -54,6 +54,7 @@ export type ListeningStatus = 'idle' | 'listening' | 'processing';
 export interface TranscriptEntry {
   id: string;
   text: string;
+  translation?: string;
   isQuestion: boolean;
   timestamp: number;
 }
@@ -72,6 +73,9 @@ export interface SessionConfig {
   systemPrompt: string;
   courseName: string;
   courseMaterials: string;
+  asrLanguage: string;
+  translateEnabled: boolean;
+  translateTargetLang: string;
 }
 
 // ===== API 响应类型 =====

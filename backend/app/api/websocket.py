@@ -83,6 +83,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     session.course_name = msg["course_name"]
                 if "course_materials" in msg:
                     session.course_materials = msg["course_materials"]
+                if "asr_language" in msg:
+                    language = str(msg.get("asr_language") or "").strip().lower()
+                    session.asr_language = language if language else "zh"
+                if "translate_enabled" in msg:
+                    session.translate_enabled = bool(msg.get("translate_enabled"))
+                if "translate_target_lang" in msg:
+                    target_lang = str(msg.get("translate_target_lang") or "").strip().lower()
+                    session.translate_target_lang = target_lang if target_lang else "en"
                 await send_json(websocket, {"type": "config_updated", "message": "配置已更新"})
 
             # ── 开始/停止监听 ──────────────────────────────────
@@ -102,8 +110,21 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 is_final = msg.get("is_final", True)
                 if not text or not is_final:
                     continue
+                translation = None
+                if session.translate_enabled:
+                    translation = await llm_service.translate_text(
+                        text=text,
+                        target_lang=session.translate_target_lang,
+                        source_lang=session.asr_language,
+                    )
                 session.add_transcript(text)
                 logger.info(f"[ASR-Web] {text}")
+                await send_json(websocket, {
+                    "type": "transcript",
+                    "text": text,
+                    "translation": translation,
+                    "buffer_length": len(session.transcript_buffer),
+                })
                 if not session.is_generating:
                     asyncio.create_task(
                         _detect_and_answer(websocket, session, text)
@@ -173,9 +194,17 @@ async def _detect_and_answer(websocket: WebSocket, session, text: str):
 async def _process_audio(websocket: WebSocket, session, audio_bytes: bytes):
     """处理音频：ASR 识别 -> 问题检测 -> 生成答案"""
     # ASR 识别
-    text = await asr_service.transcribe(audio_bytes)
+    text = await asr_service.transcribe(audio_bytes, language=session.asr_language)
     if not text:
         return
+
+    translation = None
+    if session.translate_enabled:
+        translation = await llm_service.translate_text(
+            text=text,
+            target_lang=session.translate_target_lang,
+            source_lang=session.asr_language,
+        )
 
     session.add_transcript(text)
 
@@ -183,6 +212,7 @@ async def _process_audio(websocket: WebSocket, session, audio_bytes: bytes):
     await send_json(websocket, {
         "type": "transcript",
         "text": text,
+        "translation": translation,
         "buffer_length": len(session.transcript_buffer)
     })
 

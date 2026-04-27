@@ -129,6 +129,47 @@ class LLMService:
             logger.error(f"问题检测失败: {e}")
             return False
 
+    async def translate_text(self, text: str, target_lang: str = "en", source_lang: str = "") -> str:
+        if not text or not text.strip():
+            return ""
+
+        target_lang = (target_lang or "en").strip().lower()
+        source_lang = (source_lang or "").strip().lower()
+        if source_lang and source_lang == target_lang:
+            return ""
+
+        prompt = (
+            "请将以下课堂字幕翻译成目标语言，只返回译文，不要解释。\n"
+            f"源语言: {source_lang or 'auto'}\n"
+            f"目标语言: {target_lang}\n"
+            f"文本: {text}"
+        )
+
+        payload = {
+            "model": self._model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 200,
+            "temperature": 0.1,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0, trust_env=True) as client:
+                response = await client.post(
+                    self._get_api_endpoint(),
+                    headers=self._build_headers(),
+                    json=payload,
+                )
+            response.raise_for_status()
+            result_json = response.json()
+            translated = str(result_json["choices"][0]["message"]["content"]).strip()
+            return translated
+        except ValueError as e:
+            logger.warning(f"翻译跳过（未配置 Key）: {e}")
+            return ""
+        except Exception as e:
+            logger.warning(f"翻译失败，返回空译文: {e}")
+            return ""
+
     async def generate_answer_stream(
         self,
         question_text: str,

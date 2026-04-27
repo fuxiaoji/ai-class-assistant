@@ -52,7 +52,7 @@ class ASRService:
     项目地址：https://github.com/SYSTRAN/faster-whisper
     """
 
-    async def transcribe(self, audio_bytes: bytes, language: str = "zh") -> Optional[str]:
+    async def transcribe(self, audio_bytes: bytes, language: Optional[str] = "zh") -> Optional[str]:
         """
         将音频字节流转录为文字
         :param audio_bytes: WAV/WebM/MP4 等格式的音频数据
@@ -79,7 +79,7 @@ class ASRService:
             logger.error(f"[ASR] 识别失败: {e}")
             return None
 
-    def _transcribe_sync(self, model, audio_bytes: bytes, language: str) -> Optional[str]:
+    def _transcribe_sync(self, model, audio_bytes: bytes, language: Optional[str]) -> Optional[str]:
         """同步识别（在线程池中执行，避免阻塞事件循环）"""
         try:
             audio_io = io.BytesIO(audio_bytes)

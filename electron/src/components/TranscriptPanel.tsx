@@ -43,7 +43,12 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({ transcripts })
           {entry.isQuestion && (
             <span className="text-xs text-amber-400 font-medium mr-1">❓</span>
           )}
-          {entry.text}
+          <div>{entry.text}</div>
+          {entry.translation && (
+            <div className="text-xs mt-1 text-sky-300/90 border-l-2 border-sky-500/40 pl-2">
+              {entry.translation}
+            </div>
+          )}
         </div>
       ))}
       <div ref={bottomRef} />

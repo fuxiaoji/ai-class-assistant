@@ -33,6 +33,9 @@ class ConfigUpdateMessage(BaseModel):
     system_prompt: Optional[str] = None
     course_name: Optional[str] = None
     course_materials: Optional[str] = None
+    asr_language: Optional[str] = None
+    translate_enabled: Optional[bool] = None
+    translate_target_lang: Optional[str] = None
 
 
 # ===== REST API 模型 =====
@@ -42,6 +45,9 @@ class SessionConfig(BaseModel):
     system_prompt: str = ""
     course_name: str = ""
     course_materials: str = ""
+    asr_language: str = "zh"
+    translate_enabled: bool = False
+    translate_target_lang: str = "en"
 
 
 class SessionConfigResponse(BaseModel):
@@ -50,6 +56,9 @@ class SessionConfigResponse(BaseModel):
     system_prompt: str
     course_name: str
     course_materials_preview: str  # 课件内容预览（前200字）
+    asr_language: str
+    translate_enabled: bool
+    translate_target_lang: str
     is_listening: bool
 
 

@@ -23,6 +23,21 @@ const PRESET_PROMPTS = [
   { label: '启蒙讲师', value: '你是一个耐心的启蒙讲师。请用通俗易懂的语言解释概念，避免过于复杂的表述。' },
 ];
 
+const ASR_LANGUAGE_OPTIONS = [
+  { value: 'zh', label: '中文（简体）' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: '', label: '自动检测' },
+];
+
+const TARGET_LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: '中文（简体）' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+];
+
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   sessionId,
   config,
@@ -169,6 +184,62 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
           value={config.courseName}
           onChange={e => onConfigChange({ courseName: e.target.value })}
         />
+      </div>
+
+      {/* 识别与翻译设置 */}
+      <div style={{ background: 'rgba(15,23,42,0.45)', border: '1px solid #334155', borderRadius: '8px', padding: '14px' }}>
+        <h3 style={{ color: '#93c5fd', fontSize: '13px', fontWeight: 600, marginBottom: '12px', marginTop: 0 }}>
+          🌐 识别与翻译
+        </h3>
+
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ display: 'block', color: '#cbd5e1', fontSize: '12px', marginBottom: '4px' }}>
+            识别语言
+          </label>
+          <select
+            style={inputStyle}
+            value={config.asrLanguage}
+            onChange={e => onConfigChange({ asrLanguage: e.target.value })}
+          >
+            {ASR_LANGUAGE_OPTIONS.map(option => (
+              <option key={option.label} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontSize: '12px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={config.translateEnabled}
+              onChange={e => onConfigChange({ translateEnabled: e.target.checked })}
+            />
+            开启翻译字幕
+          </label>
+          <p style={{ color: '#64748b', fontSize: '11px', marginTop: '4px', marginBottom: 0 }}>
+            开启后会在实时字幕下方展示译文（需已配置 API Key）
+          </p>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', color: '#cbd5e1', fontSize: '12px', marginBottom: '4px' }}>
+            翻译目标语言
+          </label>
+          <select
+            style={{ ...inputStyle, opacity: config.translateEnabled ? 1 : 0.65 }}
+            value={config.translateTargetLang}
+            onChange={e => onConfigChange({ translateTargetLang: e.target.value })}
+            disabled={!config.translateEnabled}
+          >
+            {TARGET_LANGUAGE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* AI 角色提示词 */}

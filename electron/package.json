@@ -1,6 +1,6 @@
 {
   "name": "ai-class-assistant-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI 实时听课助手 - 桌面端",
   "main": "dist-electron/main.js",
   "author": "fuxiaoji",
@@ -30,20 +30,48 @@
     "mac": {
       "category": "public.app-category.education",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"]
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     },
     "extraResources": [
-      { "from": "backend-bin/", "to": "backend-bin/", "filter": ["**/*"] }
+      {
+        "from": "backend-bin/",
+        "to": "backend-bin/",
+        "filter": [
+          "**/*"
+        ]
+      }
     ]
   },
   "devDependencies": {
