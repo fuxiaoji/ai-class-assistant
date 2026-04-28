@@ -1,16 +1,19 @@
 /**
- * 音频采集 Hook — 流式录音 + 实时发送完整 WebM 片段
+ * 音频采集 Hook — 流式录音 + 增量发送
  *
- * 流式方案原理：
+ * 流式增量方案原理：
  *   MediaRecorder 在 timeslice 模式下，ondataavailable 每隔 TIMESLICE_MS 触发一次：
- *     - 第 1 块：包含完整 EBML header + 第一段音频数据（可独立解析）
- *     - 第 2+ 块：裸 Opus 帧，没有 EBML header，无法独立解析
+ *     - 第 1 块：包含完整 EBML header + 第一段音频数据
+ *     - 第 2+ 块：裸 Opus 帧，没有 EBML header
  *
- *   解决方案：缓存第 1 块（header 块），后续每次收到新块时，
- *   将 header 块 + 当前块拼接成一个完整的 WebM 文件发送给后端。
- *   这样后端每次收到的都是可解析的完整 WebM，实现真正的流式识别。
+ *   前端处理：
+ *     - 块 #1：发送 header + 块#1（完整 WebM），后端识别全部
+ *     - 块 #2+：只发送裸帧 + chunk_index，后端自动拼接 header 再识别
  *
- *   延迟 = TIMESLICE_MS（默认 2000ms），比 stop/start 模式更低延迟且无录音中断。
+ *   后端处理：
+ *     - 收到 chunk_index，用 faster-whisper 识别 header + 新块
+ *     - 通过时间戳或长度对比，只返回**新增**的文字部分
+ *     - 前端根据 chunk_index 追加字幕（不重复）
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
@@ -22,7 +25,7 @@ const MIN_CHUNK_SIZE = 500;
 
 interface UseAudioCaptureOptions {
   onVolumeChange?: (volume: number) => void;
-  onAudioChunk: (base64Data: string) => void;
+  onAudioChunk: (base64Data: string, chunkIndex: number) => void;
 }
 
 export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptureOptions) {
@@ -102,7 +105,7 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
         : '';
 
       console.log(`[AudioCapture] 格式: ${mimeType || '浏览器默认'}`);
-      console.log(`[AudioCapture] 流式模式: timeslice=${TIMESLICE_MS}ms，header+chunk 拼接`);
+      console.log(`[AudioCapture] 流式增量模式: timeslice=${TIMESLICE_MS}ms，块#1发完整WebM，块#2+只发新增裸帧`);
 
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       recorderRef.current = recorder;
@@ -122,35 +125,20 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
         const hasEBML = chunk[0] === 0x1a && chunk[1] === 0x45;
 
         if (n === 1) {
-          // 第一块：保存为 header 块（含 EBML header + Tracks 等元数据）
+          // 第一块：保存为 header 块，并发送完整 WebM（header + 块#1）
           headerChunkRef.current = chunk;
           console.log(`[AudioCapture] 块 #${n}: ${chunk.length} bytes，EBML header=${hasEBML}，已缓存为 header`);
 
-          // 第一块本身就是完整可解析的 WebM，直接发送
           const base64 = uint8ToBase64(chunk);
           console.log(`[AudioCapture] 发送块 #${n}（完整 WebM）: ${chunk.length} bytes`);
-          onAudioChunkRef.current(base64);
+          onAudioChunkRef.current?.(base64, n);
         } else {
-          // 后续块：拼接 header + 当前块，形成完整 WebM 文件
-          const header = headerChunkRef.current;
-          if (!header) {
-            console.warn(`[AudioCapture] 块 #${n}: 无 header 缓存，跳过`);
-            return;
-          }
+          // 后续块：只发送裸帧（不拼接 header），后端会自动拼接
+          console.log(`[AudioCapture] 块 #${n}: ${chunk.length} bytes（裸帧），只发送新增部分`);
 
-          // 拼接：header 块 + 当前音频块
-          const combined = new Uint8Array(header.length + chunk.length);
-          combined.set(header, 0);
-          combined.set(chunk, header.length);
-
-          console.log(
-            `[AudioCapture] 块 #${n}: ${chunk.length} bytes（裸帧），` +
-            `拼接后: ${combined.length} bytes，EBML=${combined[0] === 0x1a && combined[1] === 0x45}`
-          );
-
-          const base64 = uint8ToBase64(combined);
-          console.log(`[AudioCapture] 发送块 #${n}（header+chunk 拼接）: ${combined.length} bytes`);
-          onAudioChunkRef.current(base64);
+          const base64 = uint8ToBase64(chunk);
+          console.log(`[AudioCapture] 发送块 #${n}（增量裸帧）: ${chunk.length} bytes`);
+          onAudioChunkRef.current?.(base64, n);
         }
       };
 

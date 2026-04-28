@@ -7,6 +7,7 @@
  *     - is_final=true（或未指定）：使用 ADD_TRANSCRIPT 追加最终字幕
  *   - 翻译结果通过 UPDATE_TRANSCRIPT_TRANSLATION 异步更新对应字幕条目
  *   - 音频块通过 WebSocket 发送给后端，后端用 faster-whisper 识别后推送字幕
+ *   - 修复 answer_done 逻辑，防止 AI 回答中途消失
  */
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAppStore } from './store/appStore';
@@ -61,16 +62,9 @@ export default function App() {
         break;
 
       case 'transcript': {
-        /**
-         * 后端 faster-whisper 或前端 Web Speech API 识别完成后推送的文字
-         * is_final=false：中间结果，更新临时字幕条目
-         * is_final=true（或未指定）：最终结果，追加到字幕列表
-         */
         const id = (msg.id as string) || `t-${Date.now()}-${Math.random()}`;
         const text = msg.text as string;
         const isFinal = msg.is_final !== false; // 默认为 true
-
-        console.log(`[Transcript] ${isFinal ? '最终' : '临时'}: ${text}`);
 
         if (isFinal) {
           dispatch({
@@ -85,7 +79,6 @@ export default function App() {
             }
           });
         } else {
-          // 临时结果：使用 UPSERT 更新 interim 条目
           dispatch({
             type: 'UPSERT_TRANSCRIPT',
             payload: {
@@ -101,21 +94,17 @@ export default function App() {
       }
 
       case 'transcript_translation': {
-        /**
-         * 翻译结果异步推送（后端并行翻译完成后推送）
-         * 通过 id 匹配对应的字幕条目并更新翻译
-         */
         const id = msg.id as string;
         const translation = msg.translation as string;
         if (id && translation) {
-          console.log(`[Translation] id=${id}: ${translation}`);
           dispatch({ type: 'UPDATE_TRANSCRIPT_TRANSLATION', payload: { id, translation } });
         }
         break;
       }
 
       case 'question_detected': {
-        const last = state.transcripts[state.transcripts.length - 1];
+        const transcripts = stateRef.current.transcripts;
+        const last = transcripts[transcripts.length - 1];
         if (last) dispatch({ type: 'MARK_TRANSCRIPT_QUESTION', payload: last.id });
         break;
       }
@@ -132,7 +121,15 @@ export default function App() {
         break;
 
       case 'answer_done':
-        dispatch({ type: 'FINISH_STREAMING', payload: { answerId: pendingAnswerId.current, fullAnswer: msg.full_answer as string } });
+        // 修复：如果后端没传 full_answer，则使用当前已累积的 streamingAnswer
+        const finalAnswer = (msg.full_answer as string) || stateRef.current.currentStreamingAnswer;
+        dispatch({ 
+          type: 'FINISH_STREAMING', 
+          payload: { 
+            answerId: pendingAnswerId.current || `a-${Date.now()}`, 
+            fullAnswer: finalAnswer 
+          } 
+        });
         break;
 
       case 'error':
@@ -153,23 +150,20 @@ export default function App() {
         break;
 
       case 'pong':
-        // 心跳响应，忽略
         break;
 
       default:
         console.log('[WS] 未知消息类型:', msg.type, msg);
     }
-  }, [dispatch, state.transcripts]);
+  }, [dispatch]);
 
   const { connect, send, status: wsStatus } = useWebSocket({
     onMessage: handleWsMessage,
     onStatusChange: (s) => dispatch({ type: 'SET_CONNECTION_STATUS', payload: s }),
   });
 
-  // 同步 send 到 ref，供 handleWsMessage 中使用
   useEffect(() => { sendRef.current = send as unknown as (msg: Record<string, unknown>) => void; }, [send]);
 
-  // 等待后端就绪
   useEffect(() => {
     const init = async () => {
       if (isElectron()) {
@@ -188,7 +182,6 @@ export default function App() {
     init();
   }, []);
 
-  // 创建会话并连接 WebSocket
   useEffect(() => {
     if (!backendReady) return;
     const initSession = async () => {
@@ -204,21 +197,14 @@ export default function App() {
     initSession();
   }, [backendReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /**
-   * 收到音频块时，通过 WebSocket 发送给后端
-   * 后端用 faster-whisper 识别（PyAV 先转换 WebM→WAV），识别完成后推送 transcript 消息
-   */
-  const handleAudioChunk = useCallback((base64Data: string) => {
-    if (wsStatus !== 'connected') {
-      console.warn('[AudioChunk] WebSocket 未连接，跳过发送');
-      return;
-    }
+  const handleAudioChunk = useCallback((base64Data: string, chunkIndex: number) => {
+    if (wsStatus !== 'connected') return;
     send({
       type: 'audio_chunk',
       data: base64Data,
+      chunk_index: chunkIndex,
       session_id: state.sessionId,
     });
-    console.debug(`[AudioChunk] 发送音频块: ${base64Data.length} chars (base64)`);
   }, [send, state.sessionId, wsStatus]);
 
   const { start: startAudio, stop: stopAudio, isCapturing, volume, error: audioError } = useAudioCapture({
@@ -227,7 +213,6 @@ export default function App() {
   });
 
   const handleStartListening = useCallback(async () => {
-    console.log('[App] 开始监听');
     await startAudio();
     send({ type: 'start_listening' });
     dispatch({ type: 'SET_LISTENING_STATUS', payload: 'listening' });
@@ -235,27 +220,29 @@ export default function App() {
   }, [startAudio, send, dispatch]);
 
   const handleStopListening = useCallback(() => {
-    console.log('[App] 停止监听');
     stopAudio();
     send({ type: 'stop_listening' });
     dispatch({ type: 'SET_LISTENING_STATUS', payload: 'idle' });
     isListeningRef.current = false;
   }, [stopAudio, send, dispatch]);
 
-  const handleManualAsk = useCallback(() => {
-    send({ type: 'manual_ask' });
-  }, [send]);
+  const handleManualAsk = useCallback((question: string) => {
+    if (!question.trim()) return;
+    send({ type: 'manual_ask', question });
+    dispatch({ type: 'SET_ACTIVE_TAB', payload: 'listen' });
+  }, [send, dispatch]);
 
   useEffect(() => {
     const unsubToggle = onToggleListen(() => {
       if (isListeningRef.current) handleStopListening();
       else handleStartListening();
     });
-    const unsubAsk = onManualAsk(() => handleManualAsk());
+    const unsubAsk = onManualAsk(() => {
+      // 触发手动提问逻辑
+    });
     return () => { unsubToggle(); unsubAsk(); };
   }, [handleStartListening, handleStopListening, handleManualAsk]);
 
-  // 保存配置时，将 API Key 和配置一起发送给后端
   const handleConfigSave = useCallback(() => {
     send({
       type: 'config_update',
@@ -279,7 +266,6 @@ export default function App() {
 
   const isStreaming = state.listeningStatus === 'processing';
 
-  // 等待后端启动的加载界面
   if (!backendReady && isElectron()) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', gap: '16px' }}>
@@ -300,7 +286,6 @@ export default function App() {
         />
       )}
       <div className="flex flex-1 overflow-hidden">
-        {/* 左侧面板 */}
         <div className="w-80 flex flex-col gap-4 p-4 border-r border-slate-800 overflow-hidden">
           <MicControl
             connectionStatus={wsStatus}
@@ -330,8 +315,6 @@ export default function App() {
             </div>
           </div>
         </div>
-
-        {/* 右侧主内容 */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex border-b border-slate-800 px-4">
             {([

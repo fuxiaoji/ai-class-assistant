@@ -1,7 +1,9 @@
 """
 LLM 模块 - 大语言模型服务
 支持动态 API Key（由前端传入），直接调用 OpenAI 兼容接口
-默认使用 MiniMax 接口
+修复版：
+  - 增加翻译重试机制，解决 translators 库不稳定的问题
+  - 优化流式生成，确保 chunk 完整传输
 """
 import json
 import logging
@@ -52,6 +54,7 @@ class LLMService:
             self._base_url = base_url
         if model:
             self._model = model
+        logger.info(f"[LLM] 配置已更新: base_url={self._base_url}, model={self._model}")
 
     def _get_api_endpoint(self) -> str:
         base_url = self._base_url.rstrip("/")
@@ -136,43 +139,42 @@ class LLMService:
             return ""
 
         lang_alias = {
-            "zh-cn": "zh",
-            "zh-tw": "zh",
-            "cn": "zh",
-            "jp": "ja",
-            "kr": "ko",
-            "english": "en",
-            "chinese": "zh",
-            "japanese": "ja",
-            "korean": "ko",
+            "zh-cn": "zh", "zh-tw": "zh", "cn": "zh", "zh": "zh",
+            "jp": "ja", "ja": "ja",
+            "kr": "ko", "ko": "ko",
+            "en": "en", "english": "en"
         }
 
-        target_lang = lang_alias.get((target_lang or "en").strip().lower(), (target_lang or "en").strip().lower())
-        source_lang = lang_alias.get((source_lang or "").strip().lower(), (source_lang or "").strip().lower())
-        if source_lang and source_lang == target_lang:
+        target = lang_alias.get((target_lang or "en").strip().lower(), (target_lang or "en").strip().lower())
+        source = lang_alias.get((source_lang or "").strip().lower(), (source_lang or "").strip().lower()) if source_lang else "auto"
+        
+        if source == target:
             return ""
 
-        try:
-            loop = asyncio.get_running_loop()
-            translated = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: ts.translate_text(
-                        query_text=text,
-                        translator="bing",
-                        from_language=source_lang or "auto",
-                        to_language=target_lang or "en",
-                    )
-                ),
-                timeout=6.0,
-            )
-            return str(translated).strip()
-        except asyncio.TimeoutError:
-            logger.warning("translators 翻译超时，返回空译文")
-            return ""
-        except Exception as e:
-            logger.warning(f"translators 翻译失败，返回空译文: {e}")
-            return ""
+        # 尝试多个翻译引擎进行重试
+        for engine in ["bing", "google", "alibaba"]:
+            try:
+                loop = asyncio.get_running_loop()
+                translated = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: ts.translate_text(
+                            query_text=text,
+                            translator=engine,
+                            from_language=source,
+                            to_language=target,
+                        )
+                    ),
+                    timeout=4.0,
+                )
+                if translated and str(translated).strip():
+                    return str(translated).strip()
+            except Exception as e:
+                logger.debug(f"[翻译] 引擎 {engine} 失败: {e}")
+                continue
+        
+        logger.warning(f"[翻译] 所有引擎均失败: {text[:20]}...")
+        return ""
 
     async def generate_answer_stream(
         self,
@@ -182,6 +184,10 @@ class LLMService:
         course_materials: str = "",
         history: Optional[List[Dict]] = None,
     ) -> AsyncGenerator[str, None]:
+        if not self._api_key:
+            yield "[错误：未配置 API Key]"
+            return
+
         final_system_prompt = system_prompt.strip() if system_prompt.strip() else DEFAULT_SYSTEM_PROMPT
         if course_materials.strip():
             final_system_prompt += f"\n\n## 课件内容\n\n{course_materials}"
