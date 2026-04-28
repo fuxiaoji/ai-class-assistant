@@ -48,33 +48,33 @@ npm run dist:win    # Windows (.exe)
 npm run dist:linux  # Linux (.AppImage)
 ```
 
-## 本地端 1.0.2 安装包
+## 本地端 1.0.3 安装包
 
 下载入口（GitHub）：
 
 - 最新发布页：[`Releases / latest`](https://github.com/fuxiaoji/ai-class-assistant/releases/latest)
-- 固定版本页：[`v1.0.2`](https://github.com/fuxiaoji/ai-class-assistant/releases/tag/v1.0.2)
+- 固定版本页：[`v1.0.3`](https://github.com/fuxiaoji/ai-class-assistant/releases/tag/v1.0.3)
 
 当前构建出的安装包文件（位于 `electron/release/`）：
 
-- `AI.-1.0.2-arm64.dmg`
-- `AI.-1.0.2-arm64-mac.zip`
-- `AI.-1.0.2.dmg`
-- `AI.-1.0.2-mac.zip`
+- `AI.-1.0.3-arm64.dmg`
+- `AI.-1.0.3-arm64-mac.zip`
+- `AI.-1.0.3.dmg`
+- `AI.-1.0.3-mac.zip`
 
 直链下载（GitHub Release Assets）：
 
-- [下载 `AI.-1.0.2-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.2/AI.-1.0.2-arm64.dmg)
-- [下载 `AI.-1.0.2-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.2/AI.-1.0.2-arm64-mac.zip)
-- [下载 `AI.-1.0.2.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.2/AI.-1.0.2.dmg)
-- [下载 `AI.-1.0.2-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.2/AI.-1.0.2-mac.zip)
+- [下载 `AI.-1.0.3-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.3/AI.-1.0.3-arm64.dmg)
+- [下载 `AI.-1.0.3-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.3/AI.-1.0.3-arm64-mac.zip)
+- [下载 `AI.-1.0.3.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.3/AI.-1.0.3.dmg)
+- [下载 `AI.-1.0.3-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.3/AI.-1.0.3-mac.zip)
 
 > 如果点击直链是 `404`，说明该版本的 Release 里还没有上传对应资产文件，需要在 GitHub `Releases` 页面上传后才可下载。
 
 macOS 安装与启动：
 
 ```bash
-open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.0.2-arm64.dmg
+open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.0.3-arm64.dmg
 open -a "/Applications/AI听课助手.app"
 ```
 
