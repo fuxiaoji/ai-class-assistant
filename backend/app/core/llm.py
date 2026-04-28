@@ -154,16 +154,22 @@ class LLMService:
 
         try:
             loop = asyncio.get_running_loop()
-            translated = await loop.run_in_executor(
-                None,
-                lambda: ts.translate_text(
-                    query_text=text,
-                    translator="bing",
-                    from_language=source_lang or "auto",
-                    to_language=target_lang or "en",
-                )
+            translated = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: ts.translate_text(
+                        query_text=text,
+                        translator="bing",
+                        from_language=source_lang or "auto",
+                        to_language=target_lang or "en",
+                    )
+                ),
+                timeout=6.0,
             )
             return str(translated).strip()
+        except asyncio.TimeoutError:
+            logger.warning("translators 翻译超时，返回空译文")
+            return ""
         except Exception as e:
             logger.warning(f"translators 翻译失败，返回空译文: {e}")
             return ""

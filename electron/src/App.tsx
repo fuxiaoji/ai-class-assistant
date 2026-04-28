@@ -36,19 +36,20 @@ export default function App() {
         // 连接成功后自动发送一次配置（确保 localStorage 中的 API Key 立即生效）
         setTimeout(() => {
           const s = stateRef.current;
+          const payload: Record<string, unknown> = {
+            type: 'config_update',
+            system_prompt: s.config.systemPrompt,
+            course_name: s.config.courseName,
+            course_materials: s.config.courseMaterials,
+            asr_language: s.config.asrLanguage,
+            translate_enabled: s.config.translateEnabled,
+            translate_target_lang: s.config.translateTargetLang,
+          };
           if (s.apiKey) {
-            sendRef.current({
-              type: 'config_update',
-              system_prompt: s.config.systemPrompt,
-              course_name: s.config.courseName,
-              course_materials: s.config.courseMaterials,
-              api_key: s.apiKey,
-              api_base_url: s.apiBaseUrl,
-              asr_language: s.config.asrLanguage,
-              translate_enabled: s.config.translateEnabled,
-              translate_target_lang: s.config.translateTargetLang,
-            });
+            payload.api_key = s.apiKey;
+            payload.api_base_url = s.apiBaseUrl;
           }
+          sendRef.current(payload);
         }, 300);
         break;
       case 'transcript': {

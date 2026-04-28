@@ -219,7 +219,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
             开启翻译字幕
           </label>
           <p style={{ color: '#64748b', fontSize: '11px', marginTop: '4px', marginBottom: 0 }}>
-            开启后会在实时字幕下方展示译文（需已配置 API Key）
+            开启后会在实时字幕下方展示译文（需保持联网）
           </p>
         </div>
 
