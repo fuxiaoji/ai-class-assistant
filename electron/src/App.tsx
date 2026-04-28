@@ -1,5 +1,12 @@
 /**
  * AI 实时听课助手 - Electron 桌面端主应用组件
+ *
+ * 修复记录：
+ *   - transcript 消息增加 is_final 字段处理：
+ *     - is_final=false：使用 UPSERT_TRANSCRIPT 更新临时字幕条目
+ *     - is_final=true（或未指定）：使用 ADD_TRANSCRIPT 追加最终字幕
+ *   - 翻译结果通过 UPDATE_TRANSCRIPT_TRANSLATION 异步更新对应字幕条目
+ *   - 音频块通过 WebSocket 发送给后端，后端用 faster-whisper 识别后推送字幕
  */
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAppStore } from './store/appStore';
@@ -52,42 +59,105 @@ export default function App() {
           sendRef.current(payload);
         }, 300);
         break;
+
       case 'transcript': {
-        // 后端 faster-whisper 识别完成后推送过来的文字（可能附带翻译）
-        const id = `t-${Date.now()}-${Math.random()}`;
-        dispatch({
-          type: 'ADD_TRANSCRIPT',
-          payload: {
-            id,
-            text: msg.text as string,
-            translation: msg.translation as string | undefined,
-            isQuestion: false,
-            timestamp: Date.now()
-          }
-        });
+        /**
+         * 后端 faster-whisper 或前端 Web Speech API 识别完成后推送的文字
+         * is_final=false：中间结果，更新临时字幕条目
+         * is_final=true（或未指定）：最终结果，追加到字幕列表
+         */
+        const id = (msg.id as string) || `t-${Date.now()}-${Math.random()}`;
+        const text = msg.text as string;
+        const isFinal = msg.is_final !== false; // 默认为 true
+
+        console.log(`[Transcript] ${isFinal ? '最终' : '临时'}: ${text}`);
+
+        if (isFinal) {
+          dispatch({
+            type: 'ADD_TRANSCRIPT',
+            payload: {
+              id,
+              text,
+              translation: msg.translation as string | undefined,
+              isQuestion: false,
+              timestamp: Date.now(),
+              isFinal: true,
+            }
+          });
+        } else {
+          // 临时结果：使用 UPSERT 更新 interim 条目
+          dispatch({
+            type: 'UPSERT_TRANSCRIPT',
+            payload: {
+              id,
+              text,
+              isQuestion: false,
+              timestamp: Date.now(),
+              isFinal: false,
+            }
+          });
+        }
         break;
       }
+
+      case 'transcript_translation': {
+        /**
+         * 翻译结果异步推送（后端并行翻译完成后推送）
+         * 通过 id 匹配对应的字幕条目并更新翻译
+         */
+        const id = msg.id as string;
+        const translation = msg.translation as string;
+        if (id && translation) {
+          console.log(`[Translation] id=${id}: ${translation}`);
+          dispatch({ type: 'UPDATE_TRANSCRIPT_TRANSLATION', payload: { id, translation } });
+        }
+        break;
+      }
+
       case 'question_detected': {
         const last = state.transcripts[state.transcripts.length - 1];
         if (last) dispatch({ type: 'MARK_TRANSCRIPT_QUESTION', payload: last.id });
         break;
       }
+
       case 'answer_start': {
         const id = `a-${++answerIdCounter}`;
         pendingAnswerId.current = id;
         dispatch({ type: 'START_STREAMING', payload: { question: msg.question as string, answerId: id } });
         break;
       }
+
       case 'answer_chunk':
         dispatch({ type: 'APPEND_STREAM_CHUNK', payload: msg.chunk as string });
         break;
+
       case 'answer_done':
         dispatch({ type: 'FINISH_STREAMING', payload: { answerId: pendingAnswerId.current, fullAnswer: msg.full_answer as string } });
         break;
+
       case 'error':
-        console.error('服务端错误:', msg.message);
+        console.error('[WS] 服务端错误:', msg.message);
         dispatch({ type: 'SET_LISTENING_STATUS', payload: isListeningRef.current ? 'listening' : 'idle' });
         break;
+
+      case 'config_updated':
+        console.log('[WS] 配置已更新');
+        break;
+
+      case 'listening_started':
+        console.log('[WS] 后端确认开始监听');
+        break;
+
+      case 'listening_stopped':
+        console.log('[WS] 后端确认停止监听');
+        break;
+
+      case 'pong':
+        // 心跳响应，忽略
+        break;
+
+      default:
+        console.log('[WS] 未知消息类型:', msg.type, msg);
     }
   }, [dispatch, state.transcripts]);
 
@@ -136,15 +206,20 @@ export default function App() {
 
   /**
    * 收到音频块时，通过 WebSocket 发送给后端
-   * 后端用 faster-whisper 识别，识别完成后推送 transcript 消息
+   * 后端用 faster-whisper 识别（PyAV 先转换 WebM→WAV），识别完成后推送 transcript 消息
    */
   const handleAudioChunk = useCallback((base64Data: string) => {
+    if (wsStatus !== 'connected') {
+      console.warn('[AudioChunk] WebSocket 未连接，跳过发送');
+      return;
+    }
     send({
       type: 'audio_chunk',
       data: base64Data,
       session_id: state.sessionId,
     });
-  }, [send, state.sessionId]);
+    console.debug(`[AudioChunk] 发送音频块: ${base64Data.length} chars (base64)`);
+  }, [send, state.sessionId, wsStatus]);
 
   const { start: startAudio, stop: stopAudio, isCapturing, volume, error: audioError } = useAudioCapture({
     onAudioChunk: handleAudioChunk,
@@ -152,6 +227,7 @@ export default function App() {
   });
 
   const handleStartListening = useCallback(async () => {
+    console.log('[App] 开始监听');
     await startAudio();
     send({ type: 'start_listening' });
     dispatch({ type: 'SET_LISTENING_STATUS', payload: 'listening' });
@@ -159,6 +235,7 @@ export default function App() {
   }, [startAudio, send, dispatch]);
 
   const handleStopListening = useCallback(() => {
+    console.log('[App] 停止监听');
     stopAudio();
     send({ type: 'stop_listening' });
     dispatch({ type: 'SET_LISTENING_STATUS', payload: 'idle' });

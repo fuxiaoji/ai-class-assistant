@@ -6,6 +6,7 @@ export type WSMessageType =
   | 'listening_stopped'
   | 'config_updated'
   | 'transcript'
+  | 'transcript_translation'
   | 'question_detected'
   | 'answer_start'
   | 'answer_chunk'
@@ -21,7 +22,9 @@ export interface WSMessage {
 
 export interface TranscriptMessage extends WSMessage {
   type: 'transcript';
+  id: string;
   text: string;
+  is_final?: boolean;
   buffer_length: number;
 }
 
@@ -57,6 +60,8 @@ export interface TranscriptEntry {
   translation?: string;
   isQuestion: boolean;
   timestamp: number;
+  /** 是否为临时中间结果（Web Speech API interim result） */
+  isFinal?: boolean;
 }
 
 export interface AnswerEntry {

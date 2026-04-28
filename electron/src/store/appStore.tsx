@@ -1,6 +1,11 @@
 /**
  * 全局应用状态管理
  * 使用 React Context + useReducer，无需额外依赖
+ *
+ * 修复记录：
+ *   - 增加 UPSERT_TRANSCRIPT action，支持临时字幕（interim）覆盖更新
+ *   - 临时字幕（isFinal=false）以 'interim' 为固定 id，避免重复条目堆积
+ *   - 最终结果（isFinal=true）替换临时条目并生成唯一 id
  */
 import React, { createContext, useContext, useReducer, type ReactNode } from 'react';
 import type {
@@ -58,6 +63,8 @@ type Action =
   | { type: 'SET_LISTENING_STATUS'; payload: ListeningStatus }
   | { type: 'SET_VOLUME'; payload: number }
   | { type: 'ADD_TRANSCRIPT'; payload: TranscriptEntry }
+  | { type: 'UPSERT_TRANSCRIPT'; payload: TranscriptEntry }
+  | { type: 'UPDATE_TRANSCRIPT_TRANSLATION'; payload: { id: string; translation: string } }
   | { type: 'MARK_TRANSCRIPT_QUESTION'; payload: string }
   | { type: 'ADD_ANSWER'; payload: AnswerEntry }
   | { type: 'START_STREAMING'; payload: { question: string; answerId: string } }
@@ -84,8 +91,45 @@ function appReducer(state: AppState, action: Action): AppState {
     case 'ADD_TRANSCRIPT':
       return {
         ...state,
-        transcripts: [...state.transcripts.slice(-99), action.payload],
+        // 移除临时条目（如果存在），再追加最终结果，保留最近 100 条
+        transcripts: [
+          ...state.transcripts.filter(t => t.id !== 'interim').slice(-99),
+          action.payload,
+        ],
       };
+    case 'UPSERT_TRANSCRIPT': {
+      const entry = action.payload;
+      if (!entry.isFinal) {
+        // 临时结果：替换或追加 interim 条目
+        const hasInterim = state.transcripts.some(t => t.id === 'interim');
+        if (hasInterim) {
+          return {
+            ...state,
+            transcripts: state.transcripts.map(t =>
+              t.id === 'interim' ? { ...entry, id: 'interim' } : t
+            ),
+          };
+        }
+        return {
+          ...state,
+          transcripts: [...state.transcripts.slice(-99), { ...entry, id: 'interim' }],
+        };
+      }
+      // 最终结果：移除 interim，追加最终条目
+      return {
+        ...state,
+        transcripts: [
+          ...state.transcripts.filter(t => t.id !== 'interim').slice(-99),
+          entry,
+        ],
+      };
+    }
+    case 'UPDATE_TRANSCRIPT_TRANSLATION': {
+      const updated = state.transcripts.map(t =>
+        t.id === action.payload.id ? { ...t, translation: action.payload.translation } : t
+      );
+      return { ...state, transcripts: updated };
+    }
     case 'MARK_TRANSCRIPT_QUESTION': {
       const updated = state.transcripts.map(t =>
         t.id === action.payload ? { ...t, isQuestion: true } : t

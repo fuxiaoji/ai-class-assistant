@@ -1,6 +1,11 @@
 /**
  * 实时字幕面板
  * 展示 ASR 识别出的文本，高亮显示检测到问题的条目
+ *
+ * 修复记录：
+ *   - 支持临时字幕条目（isFinal=false）：显示为半透明斜体，带动画光标
+ *   - 最终字幕正常显示
+ *   - 翻译结果在字幕下方显示（异步更新）
  */
 import React, { useEffect, useRef } from 'react';
 import type { TranscriptEntry } from '../types';
@@ -15,7 +20,7 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({ transcripts })
   // 自动滚动到底部
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [transcripts.length]);
+  }, [transcripts.length, transcripts[transcripts.length - 1]?.text]);
 
   if (transcripts.length === 0) {
     return (
@@ -31,26 +36,36 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({ transcripts })
 
   return (
     <div className="flex flex-col gap-1.5 overflow-y-auto h-full pr-1">
-      {transcripts.map((entry) => (
-        <div
-          key={entry.id}
-          className={`text-sm px-3 py-2 rounded-lg transition-all ${
-            entry.isQuestion
-              ? 'bg-amber-900/40 border border-amber-600/50 text-amber-200'
-              : 'bg-slate-800/60 text-slate-300'
-          }`}
-        >
-          {entry.isQuestion && (
-            <span className="text-xs text-amber-400 font-medium mr-1">❓</span>
-          )}
-          <div>{entry.text}</div>
-          {entry.translation && (
-            <div className="text-xs mt-1 text-sky-300/90 border-l-2 border-sky-500/40 pl-2">
-              {entry.translation}
+      {transcripts.map((entry) => {
+        const isInterim = entry.isFinal === false;
+        return (
+          <div
+            key={entry.id}
+            className={`text-sm px-3 py-2 rounded-lg transition-all ${
+              isInterim
+                ? 'bg-slate-800/30 border border-slate-700/30 text-slate-400 italic'
+                : entry.isQuestion
+                ? 'bg-amber-900/40 border border-amber-600/50 text-amber-200'
+                : 'bg-slate-800/60 text-slate-300'
+            }`}
+          >
+            {entry.isQuestion && !isInterim && (
+              <span className="text-xs text-amber-400 font-medium mr-1">❓</span>
+            )}
+            <div className="flex items-baseline gap-1">
+              <span>{entry.text}</span>
+              {isInterim && (
+                <span className="inline-block w-0.5 h-3.5 bg-sky-400 animate-pulse ml-0.5 flex-shrink-0" />
+              )}
             </div>
-          )}
-        </div>
-      ))}
+            {entry.translation && !isInterim && (
+              <div className="text-xs mt-1 text-sky-300/90 border-l-2 border-sky-500/40 pl-2">
+                {entry.translation}
+              </div>
+            )}
+          </div>
+        );
+      })}
       <div ref={bottomRef} />
     </div>
   );
