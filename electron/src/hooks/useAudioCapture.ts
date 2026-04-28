@@ -12,7 +12,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 
 /** 每个音频块的时长（毫秒）*/
-const CHUNK_INTERVAL_MS = 2000;
+const CHUNK_INTERVAL_MS = 4000;
 
 interface UseAudioCaptureOptions {
   /** 收到后端识别文字的回调（由 App.tsx 通过 WebSocket 消息触发，此 hook 不直接调用） */
@@ -96,7 +96,7 @@ export function useAudioCapture({
       recorderRef.current = recorder;
 
       recorder.ondataavailable = async (event) => {
-        if (!event.data || event.data.size < 500) return; // 跳过过小的块（静音）
+        if (!event.data || event.data.size < 200) return; // 跳过过小的块（静音）
         try {
           const arrayBuffer = await event.data.arrayBuffer();
           const uint8 = new Uint8Array(arrayBuffer);

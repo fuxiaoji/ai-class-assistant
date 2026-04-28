@@ -9,27 +9,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ELECTRON_DIR="$(dirname "$SCRIPT_DIR")"
 BACKEND_DIR="$(dirname "$ELECTRON_DIR")/backend"
 OUTPUT_DIR="$ELECTRON_DIR/backend-bin"
+PYTHON_BIN="${PYTHON_BIN:-$(dirname "$ELECTRON_DIR")/.venv/bin/python}"
 
 echo "🐍 打包 Python 后端..."
 echo "后端目录: $BACKEND_DIR"
 echo "输出目录: $OUTPUT_DIR"
 
-# 检查 PyInstaller
-if ! command -v pyinstaller &> /dev/null; then
-  echo "安装 PyInstaller..."
-  pip3 install pyinstaller
-fi
-
 # 安装后端依赖
 cd "$BACKEND_DIR"
-pip3 install -r requirements.txt
+"$PYTHON_BIN" -m pip install -r requirements.txt
+
+# 检查 PyInstaller
+if ! "$PYTHON_BIN" -m PyInstaller --version &> /dev/null; then
+  echo "安装 PyInstaller..."
+  "$PYTHON_BIN" -m pip install pyinstaller
+fi
 
 # 清理旧的打包产物
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 # 使用 PyInstaller 打包
-pyinstaller \
+"$PYTHON_BIN" -m PyInstaller \
   --onefile \
   --name "ai-class-backend" \
   --distpath "$OUTPUT_DIR" \
