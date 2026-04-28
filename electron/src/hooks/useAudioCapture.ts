@@ -1,21 +1,21 @@
 /**
- * 音频采集 Hook — 麦克风录音 + 发送完整 WebM 文件给后端
+ * 音频采集 Hook — 流式录音 + 实时发送完整 WebM 片段
  *
- * 核心修复：
- *   MediaRecorder 在 timeslice 模式下，每个小块都是裸 Opus 帧，
- *   没有 WebM 容器头（EBML header），PyAV/ffmpeg 无法解析。
+ * 流式方案原理：
+ *   MediaRecorder 在 timeslice 模式下，ondataavailable 每隔 TIMESLICE_MS 触发一次：
+ *     - 第 1 块：包含完整 EBML header + 第一段音频数据（可独立解析）
+ *     - 第 2+ 块：裸 Opus 帧，没有 EBML header，无法独立解析
  *
- *   正确方案：每隔 SEGMENT_DURATION_MS 毫秒，stop() 当前录音再 start() 新录音。
- *   每次 stop() 触发 ondataavailable 时，MediaRecorder 会产生一个完整的 WebM 文件
- *   （包含完整的 EBML header），PyAV 和 faster-whisper 都能正确解析。
+ *   解决方案：缓存第 1 块（header 块），后续每次收到新块时，
+ *   将 header 块 + 当前块拼接成一个完整的 WebM 文件发送给后端。
+ *   这样后端每次收到的都是可解析的完整 WebM，实现真正的流式识别。
  *
- * 架构：
- *   前端录音（完整 WebM 片段）→ base64 → WebSocket audio_chunk → 后端 PyAV 转 WAV → faster-whisper
+ *   延迟 = TIMESLICE_MS（默认 2000ms），比 stop/start 模式更低延迟且无录音中断。
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
-/** 每个录音片段的时长（毫秒）。越短延迟越低，但太短会导致识别不准确 */
-const SEGMENT_DURATION_MS = 4000;
+/** 每隔多少毫秒触发一次 ondataavailable（流式延迟） */
+const TIMESLICE_MS = 2000;
 
 /** 最小有效音频块大小（字节），低于此值视为静音跳过 */
 const MIN_CHUNK_SIZE = 500;
@@ -35,10 +35,10 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
-  const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isCapturingRef = useRef(false);
-  const segmentCountRef = useRef(0);
-  const mimeTypeRef = useRef('');
+
+  // 流式关键：缓存第一块（含 EBML header）
+  const headerChunkRef = useRef<Uint8Array | null>(null);
+  const chunkCountRef = useRef(0);
 
   const onVolumeChangeRef = useRef(onVolumeChange);
   const onAudioChunkRef = useRef(onAudioChunk);
@@ -83,80 +83,14 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
     }
   }, []);
 
-  /**
-   * 录制一个片段：创建新的 MediaRecorder，录制 SEGMENT_DURATION_MS 毫秒后停止
-   * 停止时 ondataavailable 会收到一个完整的 WebM 文件（含 EBML header）
-   */
-  const recordSegment = useCallback((stream: MediaStream) => {
-    if (!isCapturingRef.current) return;
-
-    const mimeType = mimeTypeRef.current;
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    recorderRef.current = recorder;
-
-    recorder.ondataavailable = async (event) => {
-      if (!event.data || event.data.size < MIN_CHUNK_SIZE) {
-        console.debug(`[AudioCapture] 片段 #${segmentCountRef.current} 过小（${event.data?.size ?? 0} bytes），跳过`);
-        return;
-      }
-      try {
-        const arrayBuffer = await event.data.arrayBuffer();
-        const uint8 = new Uint8Array(arrayBuffer);
-
-        // 验证是否有 EBML header（WebM 的魔数是 0x1A 0x45 0xDF 0xA3）
-        const hasEBML = uint8[0] === 0x1a && uint8[1] === 0x45;
-        const hasRIFF = uint8[0] === 0x52 && uint8[1] === 0x49; // RIFF (WAV)
-        console.log(
-          `[AudioCapture] 片段 #${segmentCountRef.current}: ${uint8.length} bytes, ` +
-          `magic=${uint8.slice(0, 4).join(',')}, ` +
-          `WebM=${hasEBML}, WAV=${hasRIFF}`
-        );
-
-        if (!hasEBML && !hasRIFF) {
-          console.warn('[AudioCapture] 音频块缺少容器头，跳过（裸帧无法识别）');
-          return;
-        }
-
-        const base64 = uint8ToBase64(uint8);
-        console.log(`[AudioCapture] 发送片段 #${segmentCountRef.current}: ${uint8.length} bytes → ${base64.length} chars base64`);
-        onAudioChunkRef.current(base64);
-      } catch (e) {
-        console.error('[AudioCapture] 音频块处理失败:', e);
-      }
-    };
-
-    recorder.onerror = (e) => {
-      console.error('[AudioCapture] 录音错误:', e);
-    };
-
-    // 录制完整片段后停止（不用 timeslice，stop() 时才触发 ondataavailable）
-    recorder.start();
-    segmentCountRef.current++;
-    console.log(`[AudioCapture] 开始录制片段 #${segmentCountRef.current}（${SEGMENT_DURATION_MS}ms）`);
-
-    // 定时停止，触发 ondataavailable，然后立即开始下一个片段
-    segmentTimerRef.current = setTimeout(() => {
-      if (!isCapturingRef.current) return;
-      if (recorder.state === 'recording') {
-        recorder.stop(); // 停止 → 触发 ondataavailable（完整 WebM 文件）
-      }
-      // 短暂延迟后开始下一个片段
-      setTimeout(() => {
-        if (isCapturingRef.current) {
-          recordSegment(stream);
-        }
-      }, 100);
-    }, SEGMENT_DURATION_MS);
-  }, []);
-
   const start = useCallback(async () => {
     setError(null);
-    segmentCountRef.current = 0;
+    headerChunkRef.current = null;
+    chunkCountRef.current = 0;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      isCapturingRef.current = true;
 
       startVolumeMonitor(stream);
 
@@ -166,12 +100,69 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
         : MediaRecorder.isTypeSupported('audio/webm')
         ? 'audio/webm'
         : '';
-      mimeTypeRef.current = mimeType;
-      console.log(`[AudioCapture] 使用格式: ${mimeType || '浏览器默认'}`);
-      console.log(`[AudioCapture] 录音模式: 每 ${SEGMENT_DURATION_MS}ms 一个完整片段（stop/start 循环）`);
 
+      console.log(`[AudioCapture] 格式: ${mimeType || '浏览器默认'}`);
+      console.log(`[AudioCapture] 流式模式: timeslice=${TIMESLICE_MS}ms，header+chunk 拼接`);
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+
+      recorder.ondataavailable = async (event) => {
+        if (!event.data || event.data.size < MIN_CHUNK_SIZE) {
+          console.debug(`[AudioCapture] 块 #${chunkCountRef.current + 1} 过小（${event.data?.size ?? 0} bytes），跳过`);
+          return;
+        }
+
+        const arrayBuffer = await event.data.arrayBuffer();
+        const chunk = new Uint8Array(arrayBuffer);
+        chunkCountRef.current++;
+        const n = chunkCountRef.current;
+
+        // 检测 EBML header（WebM 魔数：0x1A 0x45 0xDF 0xA3）
+        const hasEBML = chunk[0] === 0x1a && chunk[1] === 0x45;
+
+        if (n === 1) {
+          // 第一块：保存为 header 块（含 EBML header + Tracks 等元数据）
+          headerChunkRef.current = chunk;
+          console.log(`[AudioCapture] 块 #${n}: ${chunk.length} bytes，EBML header=${hasEBML}，已缓存为 header`);
+
+          // 第一块本身就是完整可解析的 WebM，直接发送
+          const base64 = uint8ToBase64(chunk);
+          console.log(`[AudioCapture] 发送块 #${n}（完整 WebM）: ${chunk.length} bytes`);
+          onAudioChunkRef.current(base64);
+        } else {
+          // 后续块：拼接 header + 当前块，形成完整 WebM 文件
+          const header = headerChunkRef.current;
+          if (!header) {
+            console.warn(`[AudioCapture] 块 #${n}: 无 header 缓存，跳过`);
+            return;
+          }
+
+          // 拼接：header 块 + 当前音频块
+          const combined = new Uint8Array(header.length + chunk.length);
+          combined.set(header, 0);
+          combined.set(chunk, header.length);
+
+          console.log(
+            `[AudioCapture] 块 #${n}: ${chunk.length} bytes（裸帧），` +
+            `拼接后: ${combined.length} bytes，EBML=${combined[0] === 0x1a && combined[1] === 0x45}`
+          );
+
+          const base64 = uint8ToBase64(combined);
+          console.log(`[AudioCapture] 发送块 #${n}（header+chunk 拼接）: ${combined.length} bytes`);
+          onAudioChunkRef.current(base64);
+        }
+      };
+
+      recorder.onerror = (e) => {
+        console.error('[AudioCapture] 录音错误:', e);
+      };
+
+      // timeslice 模式：每 TIMESLICE_MS 毫秒触发一次 ondataavailable
+      recorder.start(TIMESLICE_MS);
       setIsCapturing(true);
-      recordSegment(stream);
+      console.log(`[AudioCapture] 开始流式录音（timeslice=${TIMESLICE_MS}ms）`);
+
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[AudioCapture] 启动失败:', msg);
@@ -180,18 +171,12 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
       } else {
         setError('麦克风启动失败: ' + msg);
       }
-      isCapturingRef.current = false;
     }
-  }, [startVolumeMonitor, recordSegment]);
+  }, [startVolumeMonitor]);
 
   const stop = useCallback(() => {
-    console.log(`[AudioCapture] 停止录音，共录制 ${segmentCountRef.current} 个片段`);
-    isCapturingRef.current = false;
+    console.log(`[AudioCapture] 停止录音，共处理 ${chunkCountRef.current} 个块`);
 
-    if (segmentTimerRef.current) {
-      clearTimeout(segmentTimerRef.current);
-      segmentTimerRef.current = null;
-    }
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -205,6 +190,8 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
     streamRef.current = null;
     audioCtxRef.current = null;
     analyserRef.current = null;
+    headerChunkRef.current = null;
+    chunkCountRef.current = 0;
 
     setIsCapturing(false);
     setVolume(0);
@@ -212,8 +199,6 @@ export function useAudioCapture({ onVolumeChange, onAudioChunk }: UseAudioCaptur
 
   useEffect(() => {
     return () => {
-      isCapturingRef.current = false;
-      if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (recorderRef.current && recorderRef.current.state !== 'inactive') {
         recorderRef.current.stop();
