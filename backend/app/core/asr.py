@@ -27,8 +27,8 @@ _session_audio: Dict[str, bytes] = {}
 
 # header 最大缓存大小（前 64KB 足以包含完整 EBML header）
 HEADER_MAX_SIZE = 65536
-# 滑动窗口最大音频大小（约 60 秒）
-MAX_AUDIO_BYTES = 2 * 1024 * 1024  # 2MB
+# 滑动窗口最大音频大小（约 40 秒，平衡识别完整性与响应速度）
+MAX_AUDIO_BYTES = 1500 * 1024  # 1.5MB ≈ 40秒音频
 
 
 def _get_model():
@@ -66,10 +66,11 @@ def _convert_to_wav(audio_bytes: bytes) -> Optional[bytes]:
         output_buf = io.BytesIO()
 
         in_container = None
+        # 优先尝试 webm 格式，如果失败则尝试自动探测
         for fmt in ['webm', 'matroska', None]:
             try:
                 input_buf.seek(0)
-                c = av.open(input_buf, format=fmt)
+                c = av.open(input_buf, format=fmt, options={'probesize': '32', 'analyzeduration': '0'})
                 if any(s.type == 'audio' for s in c.streams):
                     in_container = c
                     break
@@ -120,8 +121,9 @@ def _transcribe_sync(model, wav_bytes: bytes, language: Optional[str]) -> Option
         segments, info = model.transcribe(
             audio_io,
             language=language if language else None,
-            beam_size=5,
-            vad_filter=False,
+            beam_size=1,          # 降低 beam_size 加快识别（准确性小幅降低，速度显著提升）
+            vad_filter=True,      # 开启 VAD 过滤静音段，减少无效计算
+            condition_on_previous_text=False,  # 不依赖上一段文本，避免幻觉重复
         )
         texts = [seg.text.strip() for seg in segments if seg.text.strip()]
         result = " ".join(texts) if texts else None
@@ -193,7 +195,11 @@ class ASRService:
             logger.info(f"[ASR] 块 #{chunk_index}: 累积 {len(accumulated)} bytes")
 
         # 取累积的完整音频进行识别
-        full_audio = _session_audio.get(session_id, audio_bytes)
+        # 修复：必须从 _session_audio 获取累积后的音频，否则 chunk_index > 1 时识别的是裸帧，导致 PyAV 报错
+        full_audio = _session_audio.get(session_id)
+        if full_audio is None:
+            full_audio = audio_bytes
+            
         wav_bytes = _convert_to_wav(full_audio)
         if not wav_bytes:
             logger.warning(f"[ASR] 块 #{chunk_index}: WAV 转换失败")

@@ -1,8 +1,8 @@
 /**
  * 麦克风控制面板
- * 包含开始/停止按钮、音量可视化和手动提问按钮
+ * 包含开始/停止按钮、音量可视化和手动提问按钮（弹出输入框）
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import type { ConnectionStatus, ListeningStatus } from '../types';
 
 interface MicControlProps {
@@ -11,7 +11,7 @@ interface MicControlProps {
   volume: number;
   onStartListening: () => void;
   onStopListening: () => void;
-  onManualAsk: () => void;
+  onManualAsk: (question: string) => void;
 }
 
 export const MicControl: React.FC<MicControlProps> = ({
@@ -25,6 +25,36 @@ export const MicControl: React.FC<MicControlProps> = ({
   const isConnected = connectionStatus === 'connected';
   const isListening = listeningStatus === 'listening';
   const isProcessing = listeningStatus === 'processing';
+
+  const [showAskInput, setShowAskInput] = useState(false);
+  const [question, setQuestion] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 打开输入框时自动聚焦
+  useEffect(() => {
+    if (showAskInput && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [showAskInput]);
+
+  const handleAskSubmit = () => {
+    const q = question.trim();
+    if (!q) return;
+    onManualAsk(q);
+    setQuestion('');
+    setShowAskInput(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAskSubmit();
+    }
+    if (e.key === 'Escape') {
+      setShowAskInput(false);
+      setQuestion('');
+    }
+  };
 
   // 音量条数量
   const bars = 20;
@@ -97,8 +127,8 @@ export const MicControl: React.FC<MicControlProps> = ({
         <button
           className="btn-secondary text-base px-4 py-3"
           disabled={!isConnected}
-          onClick={onManualAsk}
-          title="手动触发：让 AI 根据最近的内容生成答案"
+          onClick={() => setShowAskInput(v => !v)}
+          title="向 AI 提问"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -107,6 +137,36 @@ export const MicControl: React.FC<MicControlProps> = ({
           求助
         </button>
       </div>
+
+      {/* 提问输入框（展开/收起） */}
+      {showAskInput && (
+        <div className="w-full flex flex-col gap-2">
+          <textarea
+            ref={inputRef}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:border-sky-500 transition-colors"
+            rows={3}
+            placeholder="输入你的问题... (Enter 发送，Shift+Enter 换行，Esc 取消)"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              className="text-xs px-3 py-1.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+              onClick={() => { setShowAskInput(false); setQuestion(''); }}
+            >
+              取消
+            </button>
+            <button
+              className="text-xs px-3 py-1.5 rounded bg-sky-600 text-white hover:bg-sky-500 transition-colors disabled:opacity-40"
+              disabled={!question.trim()}
+              onClick={handleAskSubmit}
+            >
+              发送提问
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

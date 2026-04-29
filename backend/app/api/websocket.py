@@ -311,9 +311,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
             elif msg_type == "stop_listening":
                 session.is_listening = False
-                asr_service.clear_session(session_id)
-                _session_last_full_text.pop(session_id, None)
-                _session_transcript_count.pop(session_id, None)
+                # 不立即清空 session，让队列中剩余的块处理完毕
+                # 只在 start_listening 时重置，避免停止后推送全量文本
                 logger.info(f"[{session_id[:8]}] 停止监听")
                 await send_json(websocket, {"type": "listening_stopped"})
 

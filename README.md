@@ -19,6 +19,17 @@
 
 ---
 
+## 🚀 v1.1.0 更新日志 (2026-04-29)
+
+本次更新重点优化了实时字幕的交互体验与识别稳定性：
+
+1.  **🛠️ 修复字幕遮挡**：为实时字幕区增加了高度限制与内部滚动，防止长文本撑大容器遮挡完整记录区。
+2.  **🌍 实时翻译增强**：翻译功能默认开启，支持流式展示翻译结果，并实现配置持久化。
+3.  **⚡ 响应速度优化**：音频采集间隔从 2000ms 降低至 800ms，ASR 引擎识别速度提升 2-3 倍。
+4.  **🛡️ 识别稳定性修复**：修复了长视频识别中断的 Bug，优化了音频流累积逻辑与滑动窗口策略。
+
+---
+
 ## 🛠️ 技术架构
 
 项目采用模块化设计，方便功能剥离与二次开发：
@@ -63,33 +74,33 @@ pip install faster-whisper
 
 ## 🚀 快速开始
 
-本地端 1.0.4 安装包
+本地端 1.1.0 安装包
 
 下载入口（GitHub）：
 
 - 最新发布页：[`Releases / latest`](https://github.com/fuxiaoji/ai-class-assistant/releases/latest)
-- 固定版本页：[`v1.0.4`](https://github.com/fuxiaoji/ai-class-assistant/releases/tag/v1.0.4)
+- 固定版本页：[`v1.1.0`](https://github.com/fuxiaoji/ai-class-assistant/releases/tag/v1.1.0)
 
 当前构建出的安装包文件（位于 `electron/release/`）：
 
-- `AI.-1.0.4-arm64.dmg`
-- `AI.-1.0.4-arm64-mac.zip`
-- `AI.-1.0.4.dmg`
-- `AI.-1.0.4-mac.zip`
+- `AI听课助手-1.1.0-arm64.dmg`
+- `AI听课助手-1.1.0-arm64-mac.zip`
+- `AI听课助手-1.1.0.dmg`
+- `AI听课助手-1.1.0-mac.zip`
 
 直链下载（GitHub Release Assets）：
 
-- [下载 `AI.-1.0.4-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.4/AI.-1.0.4-arm64.dmg)
-- [下载 `AI.-1.0.4-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.4/AI.-1.0.4-arm64-mac.zip)
-- [下载 `AI.-1.0.4.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.4/AI.-1.0.4.dmg)
-- [下载 `AI.-1.0.4-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.0.4/AI.-1.0.4-mac.zip)
+- [下载 `AI听课助手-1.1.0-arm64.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.1.0/AI听课助手-1.1.0-arm64.dmg)
+- [下载 `AI听课助手-1.1.0-arm64-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.1.0/AI听课助手-1.1.0-arm64-mac.zip)
+- [下载 `AI听课助手-1.1.0.dmg`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.1.0/AI听课助手-1.1.0.dmg)
+- [下载 `AI听课助手-1.1.0-mac.zip`](https://github.com/fuxiaoji/ai-class-assistant/releases/download/v1.1.0/AI听课助手-1.1.0-mac.zip)
 
 
 
 macOS 安装与启动：
 
 ```bash
-open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.0.4-arm64.dmg
+open /Users/Zhuanz1/Desktop/code/helper/electron/release/AI听课助手-1.1.0-arm64.dmg
 open -a "/Applications/AI听课助手.app"
 ```
 
@@ -158,22 +169,22 @@ npm run dev
 
 ```text
 .
-├── backend/            # FastAPI 后端，处理 ASR 与 LLM 逻辑
-│   └── app/
-│       ├── core/
-│       │   ├── asr.py      # faster-whisper 本地离线 ASR
-│       │   └── llm.py      # LLM 模块，支持多服务商
-│       └── api/
-│           └── websocket.py # WebSocket 实时通信
-├── frontend/           # React 网站端源码
-├── electron/           # Electron 桌面端源码
-│   └── src/
-│       └── hooks/
-│           ├── useAudioCapture.ts  # 麦克风录音 + 发送音频块
-│           └── useWebSocket.ts     # WebSocket 连接管理
-├── scripts/            # 一键构建与部署脚本
-├── docker-compose.yml  # Docker 容器化配置
-└── nginx.conf          # 生产环境反向代理配置
+161	├── backend/            # FastAPI 后端，处理 ASR 与 LLM 逻辑
+162	│   └── app/
+163	│       ├── core/
+164	│       │   ├── asr.py      # faster-whisper 本地离线 ASR
+165	│       │   └── llm.py      # LLM 模块，支持多服务商
+166	│       └── api/
+167	│           └── websocket.py # WebSocket 实时通信
+168	├── frontend/           # React 网站端源码
+169	├── electron/           # Electron 桌面端源码
+170	│   └── src/
+171	│       └── hooks/
+172	│           ├── useAudioCapture.ts  # 麦克风录音 + 发送音频块
+173	│           └── useWebSocket.ts     # WebSocket 连接管理
+174	├── scripts/            # 一键构建与部署脚本
+175	├── docker-compose.yml  # Docker 容器化配置
+176	└── nginx.conf          # 生产环境反向代理配置
 ```
 
 ---

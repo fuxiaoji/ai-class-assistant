@@ -6,6 +6,7 @@
  *   - 增加 UPSERT_TRANSCRIPT action，支持临时字幕（interim）覆盖更新
  *   - 临时字幕（isFinal=false）以 'interim' 为固定 id，避免重复条目堆积
  *   - 最终结果（isFinal=true）替换临时条目并生成唯一 id
+ *   - translateEnabled 默认改为 true，translateTargetLang 默认改为中文，并持久化翻译配置到 localStorage
  */
 import React, { createContext, useContext, useReducer, type ReactNode } from 'react';
 import type {
@@ -33,6 +34,22 @@ interface AppState {
   apiBaseUrl: string;
 }
 
+// 从 localStorage 读取持久化的翻译配置（首次使用默认开启翻译）
+function loadTranslateConfig(): { translateEnabled: boolean; translateTargetLang: string } {
+  try {
+    const enabled = localStorage.getItem('ai_class_translate_enabled');
+    const lang = localStorage.getItem('ai_class_translate_target_lang');
+    return {
+      translateEnabled: enabled === null ? true : enabled === 'true',
+      translateTargetLang: lang || 'zh',
+    };
+  } catch {
+    return { translateEnabled: true, translateTargetLang: 'zh' };
+  }
+}
+
+const { translateEnabled: _savedTranslateEnabled, translateTargetLang: _savedTranslateTargetLang } = loadTranslateConfig();
+
 const initialState: AppState = {
   sessionId: '',
   connectionStatus: 'disconnected',
@@ -47,8 +64,8 @@ const initialState: AppState = {
     courseName: '',
     courseMaterials: '',
     asrLanguage: 'zh',
-    translateEnabled: false,
-    translateTargetLang: 'en',
+    translateEnabled: _savedTranslateEnabled,
+    translateTargetLang: _savedTranslateTargetLang,
   },
   activeTab: 'listen',
   apiKey: localStorage.getItem('ai_class_api_key') || '',
@@ -164,8 +181,16 @@ function appReducer(state: AppState, action: Action): AppState {
         listeningStatus: 'listening',
       };
     }
-    case 'UPDATE_CONFIG':
+    case 'UPDATE_CONFIG': {
+      // 持久化翻译配置
+      if (action.payload.translateEnabled !== undefined) {
+        localStorage.setItem('ai_class_translate_enabled', String(action.payload.translateEnabled));
+      }
+      if (action.payload.translateTargetLang !== undefined) {
+        localStorage.setItem('ai_class_translate_target_lang', action.payload.translateTargetLang);
+      }
       return { ...state, config: { ...state.config, ...action.payload } };
+    }
     case 'SET_ACTIVE_TAB':
       return { ...state, activeTab: action.payload };
     case 'CLEAR_HISTORY':
